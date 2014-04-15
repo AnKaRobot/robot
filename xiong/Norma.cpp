@@ -17,7 +17,7 @@ int main( int, char** argv )
   src = imread( argv[1], 1 );
 
   if( !src.data )
-    { cout<<"Usage: ./Histogram_Demo <path_to_image>"<<endl;
+    { cout<<"Usage: ./Equalization <path_to_image>"<<endl;
       return -1;
     }
 
