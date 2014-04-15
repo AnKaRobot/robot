@@ -15,7 +15,6 @@ int main (int argc, char **argv) {
 		return -1;
 	}
  
-	Mat frame, frame2;
 	bool continuer = true;
 
 	namedWindow("base", CV_WINDOW_NORMAL);
@@ -27,13 +26,19 @@ int main (int argc, char **argv) {
 	
 	moveWindow("base", 0, 0);
 	moveWindow("transformed", 500, 550);
-	moveWindow("panel", 0, 550);
+	moveWindow("panel", 0, 500);
 	
-	int hTol = 0,
-	    sTol = 0;
+	int hTol = 54,
+	    sTol = 92,
+	    dSize = 0,
+	    eSize = 0;
 	    
+	Mat frame, frame2, element;
+	   
     createTrackbar("hTolerance", "panel", &hTol, 100);
 	createTrackbar("sTolerance", "panel", &sTol, 100);
+	createTrackbar("dilateSize", "panel", &dSize, 30);
+	createTrackbar("erodeSize", "panel", &eSize, 30);
 	
 	while (continuer) {
 		video >> frame;
@@ -48,7 +53,17 @@ int main (int argc, char **argv) {
                 Scalar(175+hTol, 226+sTol, 255), 
                 frame2
             );
-          
+            
+            if (dSize > 0) {
+                element = getStructuringElement(MORPH_ELLIPSE, Size(dSize, dSize));    
+                dilate(frame2, frame2, element);
+            }
+            
+            if (eSize > 0) {
+                element = getStructuringElement(MORPH_ELLIPSE, Size(eSize, eSize));    
+                erode(frame2, frame2, element);
+            }
+            
 			imshow("base", frame);
 			imshow("transformed", frame2);
 		}
