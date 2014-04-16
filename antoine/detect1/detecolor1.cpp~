@@ -8,8 +8,8 @@ int main (int argc, char **argv) {
     
 	cout << "Début\n";
 
-    string source("/home/robuntu/Videos/vid1.mp4");
-	//int source = 0;
+    //string source("/home/robuntu/Videos/vid1.mp4");
+	int source = 0;
     VideoCapture video(source);
     
 	if (! video.isOpened()) {
@@ -35,8 +35,9 @@ int main (int argc, char **argv) {
 	
 	int hTol = 54,
 	    sTol = 92,
-	    dSize = 0,
-	    eSize = 0;
+	    dSize = 5,
+	    eSize = 5;
+	int x, y, sumX=0, sumY=0, nbPix = 0;
 	    
 	Mat frame, frame2, element;
 	   
@@ -79,7 +80,8 @@ int main (int argc, char **argv) {
                 element = getStructuringElement(MORPH_ELLIPSE, Size(dSize, dSize));    
                 dilate(frame2, frame2, element);
             }
-            int x, y, sumX=0, sumY=0, nbPix = 0;
+           
+            sumX = 0; sumY = 0; nbPix = 0;
             for (x = 0; x < frame2.rows; x ++) {
                 for (y = 0; y < frame2.cols; y ++) {
                     Scalar intensity = frame2.at<uchar>(x, y);
@@ -88,8 +90,12 @@ int main (int argc, char **argv) {
                     }
                 }
             }
+            if (nbPix > 0) {
             Point bary((int) (sumY / nbPix), (int) (sumX / nbPix));
-            circle(frame, bary, 50, Scalar(255, 0, 0), -1);
+            if (bary.x > -1 && bary.y > -1) {
+                //circle(frame, bary, 5, Scalar(255, 0, 0), -1);
+            }
+            }
 			imshow("base", frame);
 			imshow("transformed", frame2);
 		}
