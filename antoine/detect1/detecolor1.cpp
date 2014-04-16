@@ -23,9 +23,10 @@ int main (int argc, char **argv) {
 
 	namedWindow("base", CV_WINDOW_NORMAL);
 	namedWindow("transformed", CV_WINDOW_NORMAL);
-	namedWindow("panel", CV_WINDOW_AUTOSIZE);
+	namedWindow("panel", CV_WINDOW_NORMAL);
 	
 	resizeWindow("base", 500, 375);
+	resizeWindow("panel", 400, 300);
 	resizeWindow("transformed", 500, 375);
 	
 	moveWindow("base", 0, 0);
@@ -34,8 +35,8 @@ int main (int argc, char **argv) {
 	
 	int hTol = 54,
 	    sTol = 92,
-	    dSize = 0,
-	    eSize = 0;
+	    dSize = 5,
+	    eSize = 5;
 	    
 	Mat frame, frame2, element;
 	   
@@ -61,7 +62,7 @@ int main (int argc, char **argv) {
 		}
 		else {
 		    compteurErreurs = 0;
-			cvtColor(frame, frame2, CV_RGB2HSV);
+			cvtColor(frame, frame2, CV_BGR2HSV);
 			inRange(
 			    frame2, 
                 Scalar(175-hTol, 226-sTol, 0), 
@@ -78,7 +79,17 @@ int main (int argc, char **argv) {
                 element = getStructuringElement(MORPH_ELLIPSE, Size(dSize, dSize));    
                 dilate(frame2, frame2, element);
             }
-            
+            int x, y, sumX=0, sumY=0, nbPix = 0;
+            for (x = 0; x < frame2.rows; x ++) {
+                for (y = 0; y < frame2.cols; y ++) {
+                    Scalar intensity = frame2.at<uchar>(x, y);
+                    if (intensity.val[0]) {
+                        sumX += x; sumY += y; nbPix ++;
+                    }
+                }
+            }
+            Point bary((int) (sumY / nbPix), (int) (sumX / nbPix));
+            circle(frame, bary, 5, Scalar(255, 0, 0), -1);
 			imshow("base", frame);
 			imshow("transformed", frame2);
 		}
