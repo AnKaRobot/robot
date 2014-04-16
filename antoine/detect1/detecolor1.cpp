@@ -5,10 +5,12 @@ using namespace cv;
 using namespace std;
 
 int main (int argc, char **argv) {
-
+    
 	cout << "Début\n";
 
-	VideoCapture video(0);
+    string source("/home/robuntu/Videos/vid1.mp4");
+	//int source = 0;
+    VideoCapture video(source);
     
 	if (! video.isOpened()) {
 		cout << "Problème source\n";
@@ -16,6 +18,8 @@ int main (int argc, char **argv) {
 	}
  
 	bool continuer = true;
+	int compteurErreurs = 0;
+	bool neverEnd = true;
 
 	namedWindow("base", CV_WINDOW_NORMAL);
 	namedWindow("transformed", CV_WINDOW_NORMAL);
@@ -44,8 +48,19 @@ int main (int argc, char **argv) {
 		video >> frame;
 		if (frame.empty()) {
 			cout << "Problème frame\n";
+			compteurErreurs ++;
+			if (compteurErreurs > 5) {
+			    if (neverEnd) {
+			        video.open(source);
+			    }
+			    else {
+			        cout << "Arrêt : 6 frames erronées consécutives\n";
+			        continuer = false;
+			    }
+			}
 		}
 		else {
+		    compteurErreurs = 0;
 			cvtColor(frame, frame2, CV_RGB2HSV);
 			inRange(
 			    frame2, 
@@ -76,6 +91,7 @@ int main (int argc, char **argv) {
 	frame2.release();
 	
 	cout << "Fin\n";
-
+    
 	return 0;
 }
+
