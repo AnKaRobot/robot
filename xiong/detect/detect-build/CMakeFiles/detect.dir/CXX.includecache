@@ -1,0 +1,18 @@
+#IncludeRegexLine: ^[ 	]*#[ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+/home/xavier/gittest/robot/xiong/detect/detect/detect.cpp
+opencv2/highgui/highgui.hpp
+/home/xavier/gittest/robot/xiong/detect/detect/opencv2/highgui/highgui.hpp
+opencv2/imgproc/imgproc.hpp
+/home/xavier/gittest/robot/xiong/detect/detect/opencv2/imgproc/imgproc.hpp
+iostream
+-
+stdio.h
+-
+
