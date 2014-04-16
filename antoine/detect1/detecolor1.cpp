@@ -36,11 +36,16 @@ int main (int argc, char **argv) {
 	int hTol = 54,
 	    sTol = 92,
 	    dSize = 5,
-	    eSize = 5;
-	int x, y, sumX=0, sumY=0, nbPix = 0;
+	    eSize = 5,
+	    x, 
+	    y, 
+	    sumX = 0, 
+	    sumY = 0, 
+	    nbPix = 0;
 	    
 	Mat frame, frame2, element;
-	   
+	Point bary;
+	
     createTrackbar("hTolerance", "panel", &hTol, 100);
 	createTrackbar("sTolerance", "panel", &sTol, 100);
 	createTrackbar("dilateSize", "panel", &dSize, 30);
@@ -90,12 +95,13 @@ int main (int argc, char **argv) {
                     }
                 }
             }
-            if (nbPix > 0) {
-            Point bary((int) (sumY / nbPix), (int) (sumX / nbPix));
-            if (bary.x > -1 && bary.y > -1) {
-                circle(frame, bary, 5, Scalar(0, 255, 0), -1);
+            if (nbPix > 100) {
+                bary = Point((int) (sumY / nbPix), (int) (sumX / nbPix));
+                if (bary.x > -1 && bary.y > -1) {
+                    circle(frame, bary, 5, Scalar(0, 255, 0), -1);
+                }
             }
-            }
+            
 			imshow("base", frame);
 			imshow("transformed", frame2);
 		}
@@ -103,6 +109,7 @@ int main (int argc, char **argv) {
 	}
 
 	destroyAllWindows();
+	element.release();
 	video.release();
 	frame.release();
 	frame2.release();
