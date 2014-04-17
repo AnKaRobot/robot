@@ -1,5 +1,6 @@
 #include <iostream>
 #include <fstream>
+#include <string>
 #include <opencv2/opencv.hpp>
 
 #define SOURCE_FILE "source"
@@ -12,10 +13,12 @@
 
 // C920 Logitech
 #define FIELD_VIEW 78
-#define FOCAL_LEN 3.67
+#define FOCALE_LEN 3.67
 #define SENSOR_DIAG 6.0
 #define SENSOR_W 4.8
 #define SENSOR_H 3.6
+
+#define OBJECT_HEIGHT 4.4
 
 using namespace cv;
 using namespace std;
@@ -27,6 +30,11 @@ int pairiser (int nombre) {
 
 float findRotation(int center, float angleView, int widthImage) {
     return ((center * angleView) / widthImage) - (angleView / 2); 
+}
+
+
+float findDistance(int rayon, int imageH) {
+    return (FOCALE_LEN * OBJECT_HEIGHT * imageH) / (rayon * SENSOR_H) / 10;
 }
 
 int explore(Point center, int stepX, int stepY, Mat image) {
@@ -52,7 +60,16 @@ int main (int argc, char **argv) {
     sourceFile.open(SOURCE_FILE);
     getline(sourceFile, source);
     sourceFile.close();
-    VideoCapture video(source);
+    VideoCapture video;
+    switch (source[0]) {
+        case 'v':
+            video.open(source.substr(2));
+            break;
+        default:
+            video.open(0);
+            break;
+    }
+    
     
     // Gestion des erreurs si la capture est vide
 	if (! video.isOpened()) {
@@ -84,7 +101,8 @@ int main (int argc, char **argv) {
 	    sumY = 0, 
 	    nbPix = 0,
 	    norma = 0,
-	    compteurErreurs = 0;
+	    compteurErreurs = 0,
+	    rayon = 0;
 	
 	bool continuer = true,
 	    neverEnd = false;
@@ -188,15 +206,20 @@ int main (int argc, char **argv) {
                 if (center.x > -1 and center.y > -1) {
                     circle(frame, center, 2, Scalar(0, 255, 0), -1);
                     
-                    // Exploration dans 8 directions
+                    // Exploration dans plusieurs directions
                     int right = explore(center, 1, 0, frame2),
-                        left = explore(center, -1, 0, frame2);
+                        left = explore(center, -1, 0, frame2),
+                        top = explore(center, 0, -1, frame2),
+                        bot = explore(center, 0, 1, frame2);
                     
-                    circle(frame, center, right, Scalar(0, 255, 0), 1);
+                    rayon = max(max(right, left), max(top, bot));
+                    
+                    circle(frame, center, rayon, Scalar(0, 255, 0), 1);
                 }
                 
-                // Ecrire la rotation
-                output << findRotation(center.x, FIELD_VIEW, frame2.size().width) <<"\n";
+                // Ecrire la rotation et la vitesse
+                output << findRotation(center.x, FIELD_VIEW, frame2.size().width) << " ";
+                output << findDistance(rayon, frame2.size().height) << "\n";
             }
             
             // Affichage
