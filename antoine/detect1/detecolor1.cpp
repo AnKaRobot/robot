@@ -1,9 +1,21 @@
 #include <iostream>
+#include <fstream>
 #include <opencv2/opencv.hpp>
 
+#define SOURCE_FILE "source"
+#define OUTPUT_FILE "output"
+#define FILTRE_FILE "filtre"
+
 #define MAX_ERRORS 5
-#define MIN_PIX 100
+#define MIN_PIX 0
 #define MAX_STEP 25
+
+// C920 Logitech
+#define FIELD_VIEW 78
+#define FOCAL_LEN 3.67
+#define SENSOR_DIAG 6.0
+#define SENSOR_W 4.8
+#define SENSOR_H 3.6
 
 using namespace cv;
 using namespace std;
@@ -13,14 +25,33 @@ int pairiser (int nombre) {
     return (nombre % 2) ? nombre -1 : nombre;
 }
 
+float findRotation(int center, float angleView, int widthImage) {
+    return ((center * angleView) / widthImage) - (angleView / 2); 
+}
+
+int explore(Point center, int stepX, int stepY, Mat image) {
+    int x = center.x, 
+        y = center.y, 
+        r = 0, e = 0;
+    while (e < 10 and x < image.cols and x > 0 and y < image.rows and y > 0) {
+        x += stepX; y += stepY;
+        Scalar test = image.at<uchar>(y, x);
+        if (test.val[0]) { r ++; e = 0; }
+        else { e ++; }
+    }
+    return r;
+}
 
 int main (int argc, char **argv) {
     
 	cout << "Début\n";
     
     // Capture de la source
-    //string source("/home/robuntu/Videos/vid1.mp4");
-	int source = 0;
+    ifstream sourceFile;
+    string source;
+    sourceFile.open(SOURCE_FILE);
+    getline(sourceFile, source);
+    sourceFile.close();
     VideoCapture video(source);
     
     // Gestion des erreurs si la capture est vide
@@ -44,9 +75,9 @@ int main (int argc, char **argv) {
 	
 	// Déclaration des variables utilisées
 	int hTol = 54,
-	    sTol = 92,
-	    dSize = 5,
-	    eSize = 5,
+	    sTol = 57,
+	    dSize = 2,
+	    eSize = 7,
 	    x, 
 	    y, 
 	    sumX = 0, 
@@ -56,7 +87,7 @@ int main (int argc, char **argv) {
 	    compteurErreurs = 0;
 	
 	bool continuer = true,
-	    neverEnd = true;
+	    neverEnd = false;
 	   
 	Mat frame, 
 	    frame2, 
@@ -64,6 +95,8 @@ int main (int argc, char **argv) {
 	Point bary, 
 	    center(0, 0);
 	vector<Mat> channels;
+	ofstream output;
+	output.open(OUTPUT_FILE);
 
     // Création des barres de sélection	
     createTrackbar("hTolerance", "panel", &hTol, 100);
@@ -97,11 +130,11 @@ int main (int argc, char **argv) {
 		    
 		    // Normalize (fonction de xiong & tong)
 		    if (norma) {
-	            cvtColor(frame, frame, CV_BGR2YCrCb);
+	            cvtColor(frame, frame, CV_RGB2YCrCb);
 	            split(frame, channels);
 	            equalizeHist(channels[0], channels[0]);
 	            merge(channels, frame);
-	            cvtColor(frame, frame, CV_YCrCb2BGR);
+	            cvtColor(frame, frame, CV_YCrCb2RGB);
 		    }
 		    
 		    // BGR 2 HSV
@@ -137,6 +170,8 @@ int main (int argc, char **argv) {
                     }
                 }
             }
+            
+            // L'objet est trouvé
             if (nbPix > MIN_PIX) {
                 bary = Point((int) (sumY / nbPix), (int) (sumX / nbPix));
                 
@@ -151,8 +186,17 @@ int main (int argc, char **argv) {
                 center = Point(bary.x, bary.y);
                 
                 if (center.x > -1 and center.y > -1) {
-                    circle(frame, center, 5, Scalar(0, 255, 0), -1);
+                    circle(frame, center, 2, Scalar(0, 255, 0), -1);
+                    
+                    // Exploration dans 8 directions
+                    int right = explore(center, 1, 0, frame2),
+                        left = explore(center, -1, 0, frame2);
+                    
+                    circle(frame, center, right, Scalar(0, 255, 0), 1);
                 }
+                
+                // Ecrire la rotation
+                output << findRotation(center.x, FIELD_VIEW, frame2.size().width) <<"\n";
             }
             
             // Affichage
@@ -170,6 +214,7 @@ int main (int argc, char **argv) {
 	video.release();
 	frame.release();
 	frame2.release();
+	output.close();
 	
 	cout << "Fin\n";
     
