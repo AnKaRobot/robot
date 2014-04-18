@@ -20,6 +20,9 @@
 
 #define OBJECT_HEIGHT 4.4
 
+#define DIST_SECURE_MIN 10
+#define DIST_SECURE_MAX 20
+
 using namespace cv;
 using namespace std;
 
@@ -35,6 +38,46 @@ float findRotation(int center, float angleView, int widthImage) {
 
 float findDistance(int rayon, int imageH) {
     return (FOCALE_LEN * OBJECT_HEIGHT * imageH) / (rayon * SENSOR_H) / 10;
+}
+
+void findVitesse(float distance, float angle, float & Rg, float & Rd){
+    
+    float diff = abs(angle) / 90;
+    
+    if (distance < DIST_SECURE_MIN and distance > 0) {
+        if (angle == 0) {
+            Rg = -1;
+            Rd = -1;
+        }
+        if (angle > 0) {
+            Rg = 0 - diff;
+            Rd = -1;
+        }
+        if (angle < 0) {
+            Rg = -1;
+            Rd = 0 - diff;
+        }
+    }
+    else if (distance > DIST_SECURE_MAX and distance < 1000) {
+        if (angle == 0) {
+            Rg = 1;
+            Rd = 1;
+        }
+        if (angle > 0) {
+            Rg = 1 - diff;
+            Rd = 1;
+        }
+        if (angle < 0) {
+            Rg = 1; Rd = 1 - diff; }
+    }
+    
+    else {
+        if (angle > 0) { Rg = 1; Rd = -1; }
+        else if (angle < 0) { Rg = -1; Rd = 1; }
+        else { Rg = 0; Rd = 0; }
+    }
+    
+    
 }
 
 int explore(Point center, int stepX, int stepY, Mat image) {
@@ -65,9 +108,8 @@ int main (int argc, char **argv) {
         case 'v':
             video.open(source.substr(2));
             break;
-        case 'w':
-            cout << (int)source[2];
-            video.open((int)(source[2]));
+        default:
+            video.open(0);
             break;
     }
     
@@ -103,12 +145,15 @@ int main (int argc, char **argv) {
 	    nbPix = 0,
 	    norma = 0,
 	    compteurErreurs = 0,
-	    rayon = 0;
+	    rayon = 0,
+        key = 0;
 	
 	bool continuer = true,
-	    neverEnd = false;
+	    neverEnd = false,
+	    pause = false;
 	   
-	Mat frame, 
+	Mat frameO,
+	    frame, 
 	    frame2, 
         element;
 	Point bary, 
@@ -127,7 +172,10 @@ int main (int argc, char **argv) {
 	while (continuer) {
 	
 	    // Récupération d'une image
-		video >> frame;
+	    if (! pause) {
+		    video >> frameO;
+		}
+		frame = frameO.clone();
 		
 		if (frame.empty()) {
 		
@@ -211,16 +259,37 @@ int main (int argc, char **argv) {
                     int right = explore(center, 1, 0, frame2),
                         left = explore(center, -1, 0, frame2),
                         top = explore(center, 0, -1, frame2),
-                        bot = explore(center, 0, 1, frame2);
+                        bot = explore(center, 0, 1, frame2),
+                        topright = explore(center, 1, -1, frame2),
+                        topleft = explore(center, -1, -1, frame2),
+                        botright = explore(center, 1, 1, frame2),
+                        botleft = explore(center, -1, 1, frame2);
                     
-                    rayon = max(max(right, left), max(top, bot));
+                    rayon = max(
+                        max(
+                            max(right, left), 
+                            max(top, bot)
+                        ),
+                        max(
+                            max(topright, topleft),
+                            max(botright, botleft) 
+                        )
+                    );
                     
                     circle(frame, center, rayon, Scalar(0, 255, 0), 1);
                 }
                 
+                float angle, distance, Rg, Rd;
+                angle = findRotation(center.x, FIELD_VIEW, frame2.size().width);
+                distance = findDistance(rayon, frame2.size().height);
+                findVitesse(distance, angle, Rg, Rd);
+                
                 // Ecrire la rotation et la vitesse
-                output << findRotation(center.x, FIELD_VIEW, frame2.size().width) << " ";
-                output << findDistance(rayon, frame2.size().height) << "\n";
+                output 
+                    << "A = " << angle << "°    "
+                    << "D = " << distance << "cm    "
+                    << "Rg = " << Rg << "   "
+                    << "Rd = " << Rd << "\n";
             }
             
             // Affichage
@@ -229,13 +298,24 @@ int main (int argc, char **argv) {
 		}
 		
 		// Rafraîchissement
-		if (waitKey(30) != -1) { continuer = false; }
+		key = waitKey(30);
+		switch (key) {
+		    case 32 :
+		        pause = pause ? false : true;
+	            break;
+            case -1 :
+                break;
+            default :
+                continuer = false;
+                break;
+		}
 	}
 
     // Libération de mémoire
 	destroyAllWindows();
 	element.release();
 	video.release();
+	frameO.release();
 	frame.release();
 	frame2.release();
 	output.close();
