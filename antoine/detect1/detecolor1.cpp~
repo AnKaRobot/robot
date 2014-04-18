@@ -205,8 +205,8 @@ int main (int argc, char **argv) {
 		    }
 		    
 		    // BGR 2 HSV
-			cvtColor(frame, frame2, CV_BGR2HSV);
-			
+			cvtColor(frame, frame2, CV_BGR2GRAY);
+			threshold(frame2, frame2, hTol, 255, CV_THRESH_BINARY);
 			// Couleur ciblée en blanc et le reste en noir
 			inRange(
 			    frame2, 
@@ -214,6 +214,7 @@ int main (int argc, char **argv) {
                 Scalar(175+hTol, 226+sTol, 255), 
                 frame2
             );
+            
             
             // Erode
             if (eSize > 0) {
