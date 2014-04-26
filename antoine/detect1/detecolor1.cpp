@@ -5,11 +5,9 @@
 
 #define SOURCE_FILE "source"
 #define OUTPUT_FILE "output"
-#define FILTRE_FILE "filtre"
 
 #define MAX_ERRORS 5
 #define MIN_PIX 0
-#define MAX_STEP 25
 
 // C920 Logitech
 #define FIELD_VIEW 78
@@ -23,75 +21,27 @@
 #define DIST_SECURE_MIN 10
 #define DIST_SECURE_MAX 20
 
+#define TOP 0
+#define TOP_RIGHT 1
+#define RIGHT 2
+#define BOT_RIGHT 3
+#define BOT 4
+#define BOT_LEFT 5
+#define LEFT 6
+#define TOP_LEFT 7
+
+#define REFRESH 30
+#define PAUSE_KEY 32
+
 using namespace cv;
 using namespace std;
 
-
-int pairiser (int nombre) {
-    return (nombre % 2) ? nombre -1 : nombre;
-}
-
-float findRotation(int center, float angleView, int widthImage) {
-    return ((center * angleView) / widthImage) - (angleView / 2); 
-}
-
-
-float findDistance(int rayon, int imageH) {
-    return (FOCALE_LEN * OBJECT_HEIGHT * imageH) / (rayon * SENSOR_H) / 10;
-}
-
-void findVitesse(float distance, float angle, float & Rg, float & Rd){
-    
-    float diff = abs(angle) / 90;
-    
-    if (distance < DIST_SECURE_MIN and distance > 0) {
-        if (angle == 0) {
-            Rg = -1;
-            Rd = -1;
-        }
-        if (angle > 0) {
-            Rg = 0 - diff;
-            Rd = -1;
-        }
-        if (angle < 0) {
-            Rg = -1;
-            Rd = 0 - diff;
-        }
-    }
-    else if (distance > DIST_SECURE_MAX and distance < 1000) {
-        if (angle == 0) {
-            Rg = 1;
-            Rd = 1;
-        }
-        if (angle > 0) {
-            Rg = 1 - diff;
-            Rd = 1;
-        }
-        if (angle < 0) {
-            Rg = 1; Rd = 1 - diff; }
-    }
-    
-    else {
-        if (angle > 0) { Rg = 1; Rd = -1; }
-        else if (angle < 0) { Rg = -1; Rd = 1; }
-        else { Rg = 0; Rd = 0; }
-    }
-    
-    
-}
-
-int explore(Point center, int stepX, int stepY, Mat image) {
-    int x = center.x, 
-        y = center.y, 
-        r = 0, e = 0;
-    while (e < 10 and x < image.cols and x > 0 and y < image.rows and y > 0) {
-        x += stepX; y += stepY;
-        Scalar test = image.at<uchar>(y, x);
-        if (test.val[0]) { r ++; e = 0; }
-        else { e ++; }
-    }
-    return r;
-}
+// Fonctions utilisées
+int pairiser (int nombre);
+float findRotation(int center, float angleView, int widthImage);
+float findDistance(int rayon, int imageH);
+void findVitesses(float distance, float angle, float & Rg, float & Rd);
+int explore(Point center, int stepX, int stepY, Mat image);
 
 int main (int argc, char **argv) {
     
@@ -121,61 +71,84 @@ int main (int argc, char **argv) {
 	}
 
     // Création des fenêtres
-	namedWindow("base", CV_WINDOW_NORMAL);
-	namedWindow("transformed", CV_WINDOW_NORMAL);
+	namedWindow("trace", CV_WINDOW_NORMAL);
 	namedWindow("panel", CV_WINDOW_NORMAL);
+	namedWindow("transformed", CV_WINDOW_NORMAL);
+	namedWindow("base", CV_WINDOW_NORMAL);
 	
 	resizeWindow("base", 500, 375);
-	resizeWindow("panel", 400, 300);
 	resizeWindow("transformed", 500, 375);
+	resizeWindow("panel", 450, 175);
+	resizeWindow("trace", 500, 375);
 	
 	moveWindow("base", 0, 0);
-	moveWindow("transformed", 500, 550);
-	moveWindow("panel", 0, 400);
+	moveWindow("transformed", 520, 550);
+	moveWindow("panel", 0, 410);
+	moveWindow("trace", 520, 0);
 	
 	// Déclaration des variables utilisées
 	int hTol = 54,
 	    sTol = 57,
 	    dSize = 2,
 	    eSize = 7,
-	    x, 
-	    y, 
+	    x = 0, 
+	    y = 0,
 	    sumX = 0, 
 	    sumY = 0, 
 	    nbPix = 0,
 	    norma = 0,
+	    blur = 0,
+	    tracer = 1,
 	    compteurErreurs = 0,
 	    rayon = 0,
-        key = 0;
+        key = 0,
+        tableExplore[8] = {0},
+	    i = 0, 
+        maxExplore = 0;
+        
+    float angle = 0.0, 
+        distance = 0.0, 
+        Rg = 0.0, 
+        Rd = 0.0;
 	
 	bool continuer = true,
-	    neverEnd = false,
 	    pause = false;
 	   
-	Mat frameO,
+	Mat frameOrigine,
 	    frame, 
-	    frame2, 
+	    frame2,
+	    trace(
+	        video.get(CV_CAP_PROP_FRAME_HEIGHT), 
+	        video.get(CV_CAP_PROP_FRAME_WIDTH),
+	        CV_8UC3
+        ),
         element;
-	Point bary, 
-	    center(0, 0);
+        
+	Point center(0, 0);
+	
 	vector<Mat> channels;
+	
+	Scalar intensity;
+	
 	ofstream output;
 	output.open(OUTPUT_FILE);
 
     // Création des barres de sélection	
-    createTrackbar("hTolerance", "panel", &hTol, 100);
-	createTrackbar("sTolerance", "panel", &sTol, 100);
-	createTrackbar("dilateSize", "panel", &dSize, 30);
-	createTrackbar("erodeSize", "panel", &eSize, 30);
-	createTrackbar("normalize", "panel", &norma, 1);
+    //createTrackbar("hTolerance", "panel", &hTol, 100);
+	//createTrackbar("sTolerance", "panel", &sTol, 100);
+	//createTrackbar("dilateSize", "panel", &dSize, 30);
+	//createTrackbar("erodeSize", "panel", &eSize, 30);
+	//createTrackbar("normalize", "panel", &norma, 1);
+	createTrackbar("blur", "panel", &blur, 50);
+	createTrackbar("trace", "panel", &tracer, 1);
 	
 	while (continuer) {
 	
 	    // Récupération d'une image
 	    if (! pause) {
-		    video >> frameO;
+		    video >> frameOrigine;
 		}
-		frame = frameO.clone();
+		frame = frameOrigine.clone();
 		
 		if (frame.empty()) {
 		
@@ -183,13 +156,8 @@ int main (int argc, char **argv) {
 			cout << "Problème frame\n";
 			compteurErreurs ++;
 			if (compteurErreurs > MAX_ERRORS) {
-			    if (neverEnd) {
-			        video.open(source);
-			    }
-			    else {
-			        cout << "Arrêt : 6 frames erronées consécutives\n";
-			        continuer = false;
-			    }
+	            cout << "Arrêt : 6 frames erronées consécutives\n";
+	            continuer = false;
 			}
 		}
 		else {
@@ -202,6 +170,11 @@ int main (int argc, char **argv) {
 	            equalizeHist(channels[0], channels[0]);
 	            merge(channels, frame);
 	            cvtColor(frame, frame, CV_YCrCb2RGB);
+		    }
+		    
+		    // Blur / Flou
+		    if (blur) {
+		        GaussianBlur(frame, frame, Size(9, 9), blur, blur);
 		    }
 		    
 		    // BGR 2 HSV
@@ -231,7 +204,7 @@ int main (int argc, char **argv) {
             sumX = 0; sumY = 0; nbPix = 0;
             for (x = 0; x < pairiser(frame2.rows); x += 2) {
                 for (y = 0; y < pairiser(frame2.cols); y += 2) {
-                    Scalar intensity = frame2.at<uchar>(x, y);
+                    intensity = frame2.at<uchar>(x, y);
                     if (intensity.val[0]) {
                         sumX += x; sumY += y; nbPix ++;
                     }
@@ -240,67 +213,73 @@ int main (int argc, char **argv) {
             
             // L'objet est trouvé
             if (nbPix > MIN_PIX) {
-                bary = Point((int) (sumY / nbPix), (int) (sumX / nbPix));
                 
-                /*int diffX = min(abs(bary.x - center.x), MAX_STEP);
-                if (bary.x < center.x) { diffX = 0 - diffX; }
-                
-                int diffY = min(abs(bary.y - center.y), MAX_STEP);
-                if (bary.y < center.y) { diffY = 0 - diffY; }
-                
-                center = Point(center.x + diffX, center.y + diffY);*/
-                
-                center = Point(bary.x, bary.y);
+                center = Point((int) (sumY / nbPix), (int) (sumX / nbPix));
                 
                 if (center.x > -1 and center.y > -1) {
-                    circle(frame, center, 2, Scalar(0, 255, 0), -1);
                     
                     // Exploration dans plusieurs directions
-                    int right = explore(center, 1, 0, frame2),
-                        left = explore(center, -1, 0, frame2),
-                        top = explore(center, 0, -1, frame2),
-                        bot = explore(center, 0, 1, frame2),
-                        topright = explore(center, 1, -1, frame2),
-                        topleft = explore(center, -1, -1, frame2),
-                        botright = explore(center, 1, 1, frame2),
-                        botleft = explore(center, -1, 1, frame2);
                     
-                    rayon = max(
-                        max(
-                            max(right, left), 
-                            max(top, bot)
-                        ),
-                        max(
-                            max(topright, topleft),
-                            max(botright, botleft) 
-                        )
-                    );
+                    tableExplore[TOP] = explore(center, 0, -1, frame2),
+                    tableExplore[TOP_RIGHT] = explore(center, 1, -1, frame2),
+                    tableExplore[RIGHT] = explore(center, 1, 0, frame2),
+                    tableExplore[BOT_RIGHT] = explore(center, 1, 1, frame2),
+                    tableExplore[BOT] = explore(center, 0, 1, frame2),
+                    tableExplore[BOT_LEFT] = explore(center, -1, 1, frame2);
+                    tableExplore[LEFT] = explore(center, -1, 0, frame2),
+                    tableExplore[TOP_LEFT] = explore(center, -1, -1, frame2),
                     
-                    circle(frame, center, rayon, Scalar(0, 255, 0), 1);
+                    maxExplore = 0;
+                    for (i = 0; i < 8; i ++) {
+                        if (tableExplore[i] > maxExplore) {
+                            maxExplore = tableExplore[i];
+                        }
+                    }
+                    rayon = maxExplore;
+                    
                 }
                 
-                float angle, distance, Rg, Rd;
+                // Calculer angle distance et vitesses
                 angle = findRotation(center.x, FIELD_VIEW, frame2.size().width);
                 distance = findDistance(rayon, frame2.size().height);
-                findVitesse(distance, angle, Rg, Rd);
+                findVitesses(distance, angle, Rg, Rd);
                 
-                // Ecrire la rotation et la vitesse
-                output 
-                    << "A = " << angle << "°    "
-                    << "D = " << distance << "cm    "
-                    << "Rg = " << Rg << "   "
-                    << "Rd = " << Rd << "\n";
+                // Ecrire la rotation, la distance et les vitesses
+                if(! pause) {
+                    output 
+                        << "A = " << angle << "°            "
+                        << "D = " << distance << "cm        "
+                        << "Rg = " << Rg << "   "
+                        << "Rd = " << Rd << "\n";
+                }
             }
             
             // Affichage
+            if (tracer) {
+            
+                // Fenêtre Base
+                circle(frame, center, 2, Scalar(0, 255, 0), -1); // centre
+                circle(frame, center, rayon, Scalar(0, 255, 0), 1); // périmètre
+                
+                // Fenêtre Transformed
+                cvtColor(frame2, frame2, CV_GRAY2BGR);
+                circle(frame2, center, 2, Scalar(0, 0, 255), -1);
+                circle(frame2, center, rayon, Scalar(0, 0, 255), 1); 
+            }
+            
+            // Fenêtre Trace
+            circle(trace, center, 2, Scalar(0, 0, 255), -1);
+            circle(trace, center, rayon, Scalar(0, rayon * 5, 255), 1); 
+            
 			imshow("base", frame);
 			imshow("transformed", frame2);
+			imshow("trace", trace);
 		}
 		
 		// Rafraîchissement
-		key = waitKey(30);
+		key = waitKey(REFRESH);
 		switch (key) {
-		    case 32 :
+		    case PAUSE_KEY :
 		        pause = pause ? false : true;
 	            break;
             case -1 :
@@ -315,9 +294,10 @@ int main (int argc, char **argv) {
 	destroyAllWindows();
 	element.release();
 	video.release();
-	frameO.release();
+	frameOrigine.release();
 	frame.release();
 	frame2.release();
+	trace.release();
 	output.close();
 	
 	cout << "Fin\n";
@@ -325,3 +305,61 @@ int main (int argc, char **argv) {
 	return 0;
 }
 
+
+int pairiser (int nombre) {
+    return (nombre % 2) ? nombre -1 : nombre;
+}
+
+float findRotation(int center, float angleView, int widthImage) {
+    if (widthImage > 0) {
+        return ((center * angleView) / widthImage) - (angleView / 2); 
+    }
+    else { return 0; }
+}
+
+
+float findDistance(int rayon, int imageH) {
+    if (rayon > 0) {
+        return (FOCALE_LEN * OBJECT_HEIGHT * imageH) / (rayon * SENSOR_H) / 10;
+    }
+    else { return 0; }
+}
+
+void findVitesses(float distance, float angle, float & Rg, float & Rd){
+    
+    float diff = abs(angle) / 90;
+    
+    if (distance < DIST_SECURE_MIN and distance > 0) {
+        Rg = -1;
+        Rd = -1;
+        if (angle > 0) { Rg = 0 - diff; }
+        else if (angle < 0) { Rd = 0 - diff; }
+    }
+    else if (distance > DIST_SECURE_MAX and distance < 1000) {
+        Rg = 1;
+        Rd = 1;
+        if (angle > 0) { Rg = 1 - diff; }
+        else if (angle < 0) { Rd = 1 - diff; }
+    }
+    else {
+        if (angle > 0) { Rg = 1; Rd = -1; }
+        else if (angle < 0) { Rg = -1; Rd = 1; }
+        else { Rg = 0; Rd = 0; }
+    }
+    
+    Rg *= 300;
+    Rd *= 300;
+}
+
+int explore(Point center, int stepX, int stepY, Mat image) {
+    int x = center.x, 
+        y = center.y, 
+        rayon = 0, e = 0;
+    while (e < 30 and x < image.cols and x > 0 and y < image.rows and y > 0) {
+        x += stepX; y += stepY;
+        Scalar test = image.at<uchar>(y, x);
+        if (test.val[0]) { rayon ++; e = 0; }
+        else { e ++; }
+    }
+    return rayon;
+}
