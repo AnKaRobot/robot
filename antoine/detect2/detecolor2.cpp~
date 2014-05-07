@@ -16,7 +16,7 @@
 #define SENSOR_W 4.8
 #define SENSOR_H 3.6
 
-#define OBJECT_HEIGHT 4.4
+#define OBJECT_HEIGHT 3
 
 #define DIST_SECURE_MIN 10
 #define DIST_SECURE_MAX 20
@@ -33,10 +33,10 @@
 #define REFRESH 30
 #define PAUSE_KEY 32
 
-#define HUE_BASE 175
-#define HUE_TOLERANCE 54
-#define SATURATION_BASE 226
-#define SATURATION_TOLERANCE 57
+#define HUE_BASE 180
+#define HUE_TOLERANCE 30
+#define SATURATION_BASE 185
+#define SATURATION_TOLERANCE 59
 #define DILATE_SIZE 2
 #define ERODE_SIZE 7
 
@@ -47,7 +47,7 @@ using namespace std;
 float findRotation(int center, float angleView, int widthImage);
 float findDistance(int rayon, int imageH);
 void findVitesses(float distance, float angle, float & Rg, float & Rd);
-void findObject(vector<vector<Point> > contours, Point center, int & rayon);
+void findObject(vector<vector<Point> > contours, Point & center, int & rayon);
 
 int main (int argc, char **argv) {
     
@@ -95,6 +95,11 @@ int main (int argc, char **argv) {
 	// Déclaration des variables utilisées
 	int blur = 1,
 	    tracer = 1,
+	    norma = 1,
+	    hue = HUE_BASE,
+	    saturation = SATURATION_BASE,
+	    hueCustom = HUE_TOLERANCE,
+	    saturationCustom = SATURATION_TOLERANCE,
 	    compteurErreurs = 0,
 	    rayon = 0,
         key = 0;
@@ -108,7 +113,8 @@ int main (int argc, char **argv) {
 	    pause = false;
 	   
 	Mat frameOrigine,
-	    frame, 
+	    frame,
+	    frameNorma, 
 	    frame2,
 	    trace(
 	        video.get(CV_CAP_PROP_FRAME_HEIGHT), 
@@ -129,8 +135,13 @@ int main (int argc, char **argv) {
 	output.open(OUTPUT_FILE);
 
     // Création des barres de sélection	
-	createTrackbar("blur", "panel", &blur, 5);
+	//createTrackbar("blur", "panel", &blur, 5);
 	createTrackbar("trace", "panel", &tracer, 1);
+	createTrackbar("hue base", "panel", &hue, 180);
+	createTrackbar("saturation base", "panel", &saturation, 255);
+	createTrackbar("hue tolerance", "panel", &hueCustom, 100);
+	createTrackbar("saturation tolerance", "panel", &saturationCustom, 100);
+	createTrackbar("norma", "panel", &norma, 1);
 	
 	while (continuer) {
 	
@@ -158,14 +169,23 @@ int main (int argc, char **argv) {
 		        GaussianBlur(frame, frame, Size(9, 9), blur, blur);
 		    }
 		    
+		    // Normalize
+		    if (norma) {
+		    	cvtColor(frame, frameNorma, CV_BGR2YCrCb); 
+		    	split(frameNorma, channels); 
+		    	equalizeHist(channels[0], channels[0]);
+		    	merge(channels,frameNorma); 
+			cvtColor(frameNorma, frame, CV_YCrCb2BGR); 
+		    }
+		    
 		    // BGR 2 HSV
 			cvtColor(frame, frame2, CV_BGR2HSV);
 			
 			// Couleur ciblée en blanc et le reste en noir
 			inRange(
 			    frame2, 
-                Scalar(HUE_BASE - HUE_TOLERANCE, SATURATION_BASE - SATURATION_TOLERANCE, 0), 
-                Scalar(HUE_BASE + HUE_TOLERANCE, SATURATION_BASE + HUE_TOLERANCE, 255), 
+		Scalar(hue - hueCustom, saturation - saturationCustom, 0), 
+		Scalar(hue + hueCustom, saturation + saturationCustom, 255), 
                 frame2
             );
             
@@ -178,8 +198,9 @@ int main (int argc, char **argv) {
             dilate(frame2, frame2, element);           
             
             // Trouver l'objet
-            findContours(frame2, contours, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE, Point(0, 0)); 
-            drawContours(frame, contours, -1, Scalar(255, 255, 0));
+            Mat frameContours = frame2.clone();
+            findContours(frameContours, contours, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE, Point(0, 0)); 
+            drawContours(frame2, contours, -1, Scalar(255, 255, 0));
             findObject(contours, center, rayon);
             
             // Calculer angle distance et vitesses
@@ -193,8 +214,10 @@ int main (int argc, char **argv) {
                     << "A = " << angle << "°            "
                     << "D = " << distance << "cm        "
                     << "Rg = " << Rg << "   "
-                    << "Rd = " << Rd << "\n";
+                    << "Rd = " << Rd << "\n" << endl;
             }
+            
+            if (rayon <= 0) { rayon = 1; }
             
             // Affichage
             if (tracer) {
@@ -247,7 +270,7 @@ int main (int argc, char **argv) {
 	return 0;
 }
 
-void findObject(vector<vector<Point> > contours, Point center, int & rayon) {
+void findObject(vector<vector<Point> > contours, Point & center, int & rayon) {
     
     int newRayon = 0, 
         newNewRayon = 0, 
