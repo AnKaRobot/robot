@@ -17,6 +17,7 @@
 
 #define REFRESH 30
 #define PAUSE_KEY 32
+#define EXIT_KEY 10
 
 #define HUE_BASE 180
 #define HUE_TOLERANCE 20
@@ -94,15 +95,16 @@ int main (int argc, char **argv) {
 	int blur = 1,
 	    tracer = 1,
 	    norma = 1,
+	    inverseRed = 1,
 	    hue = HUE_BASE,
 	    saturation = SATURATION_BASE,
 	    hueCustom = HUE_TOLERANCE,
 	    saturationCustom = SATURATION_TOLERANCE,
 	    compteurErreurs = 0,
-	    rayon = 0,
         key = 0,
         videoHeight = video.get(CV_CAP_PROP_FRAME_HEIGHT),
-        videoWidth = video.get(CV_CAP_PROP_FRAME_WIDTH);
+        videoWidth = video.get(CV_CAP_PROP_FRAME_WIDTH),
+	    rayon = max(videoWidth, videoHeight);
         
     float angle = 0.0, 
         distance = 0.0, 
@@ -114,12 +116,14 @@ int main (int argc, char **argv) {
 	   
 	Mat frameOrigine,
 	    frameCouleurs,
+	    frameHSV,
 	    frameDetection,
+	    frameDetectionInverseRed,
 	    frameTrace(videoHeight, videoWidth, CV_8UC3),
         frameContours,
         element;
         
-	Point center(0, 0);
+	Point center((int)(videoWidth / 2) , (int)(videoHeight / 2));
 	
 	vector<Mat> channels;
 	
@@ -131,11 +135,12 @@ int main (int argc, char **argv) {
     // Création des barres de sélection	
 	//createTrackbar("blur", "panel", &blur, 5);
 	createTrackbar("trace", "panel", &tracer, 1);
-	createTrackbar("hue base", "panel", &hue, 180);
-	createTrackbar("saturation base", "panel", &saturation, 255);
+	//createTrackbar("hue base", "panel", &hue, 180);
+	//createTrackbar("saturation base", "panel", &saturation, 255);
 	createTrackbar("hue tolerance", "panel", &hueCustom, 100);
 	createTrackbar("saturation tolerance", "panel", &saturationCustom, 100);
 	createTrackbar("norma", "panel", &norma, 1);
+	createTrackbar("Inverse Red Range", "panel", &inverseRed, 1);
 	
 	while (continuer) {
 	
@@ -173,15 +178,27 @@ int main (int argc, char **argv) {
 		    }
 		    
 		    // BGR 2 HSV
-			cvtColor(frameCouleurs, frameDetection, CV_BGR2HSV);
+			cvtColor(frameCouleurs, frameHSV, CV_BGR2HSV);
 			
 			// Couleur ciblée en blanc et le reste en noir
+            
 			inRange(
-			    frameDetection, 
+			    frameHSV, 
 		        Scalar(hue - hueCustom, saturation - saturationCustom, 0), 
 		        Scalar(hue + hueCustom, saturation + saturationCustom, 255), 
                 frameDetection
             );
+            
+            // Autre rouge (il y a la teinte 180 et la 0)
+            if (inverseRed) {
+                inRange(
+			        frameHSV, 
+		            Scalar(0, saturation - saturationCustom, 0), 
+		            Scalar(5, saturation + saturationCustom, 255), 
+                    frameDetectionInverseRed
+                );
+                addWeighted(frameDetection, 1, frameDetectionInverseRed, 1, 0, frameDetection, frameDetection.type());
+            }
             
             // Erode
             element = getStructuringElement(MORPH_ELLIPSE, Size(ERODE_SIZE, ERODE_SIZE));    
@@ -193,7 +210,7 @@ int main (int argc, char **argv) {
             
             // Trouver l'objet
             frameContours = frameDetection.clone();
-            findContours(frameContours, contours, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE, Point(0, 0)); 
+            findContours(frameContours, contours, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_NONE, Point(0, 0)); 
             drawContours(frameDetection, contours, -1, Scalar(255, 255, 0));
             findObject(contours, center, rayon);
             
@@ -241,9 +258,7 @@ int main (int argc, char **argv) {
 		    case PAUSE_KEY :
 		        pause = pause ? false : true;
 	            break;
-            case -1 :
-                break;
-            default :cout << key;
+            case EXIT_KEY :
                 continuer = false;
                 break;
 		}
@@ -255,7 +270,9 @@ int main (int argc, char **argv) {
 	video.release();
 	frameOrigine.release();
 	frameCouleurs.release();
+	frameHSV.release();
 	frameDetection.release();
+	frameDetectionInverseRed.release();
 	frameTrace.release();
 	frameContours.release();
 	output.close();
