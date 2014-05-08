@@ -6,9 +6,6 @@
 #define SOURCE_FILE "source"
 #define OUTPUT_FILE "output"
 
-#define MAX_ERRORS 5
-#define MIN_PIX 0
-
 // C920 Logitech
 #define FIELD_VIEW 78
 #define FOCALE_LEN 3.67
@@ -18,27 +15,28 @@
 
 #define OBJECT_HEIGHT 3
 
-#define DIST_SECURE_MIN 10
-#define DIST_SECURE_MAX 20
-
-#define TOP 0
-#define TOP_RIGHT 1
-#define RIGHT 2
-#define BOT_RIGHT 3
-#define BOT 4
-#define BOT_LEFT 5
-#define LEFT 6
-#define TOP_LEFT 7
-
 #define REFRESH 30
 #define PAUSE_KEY 32
 
 #define HUE_BASE 180
 #define HUE_TOLERANCE 20
 #define SATURATION_BASE 255
-#define SATURATION_TOLERANCE 100
+#define SATURATION_TOLERANCE 39
 #define DILATE_SIZE 2
 #define ERODE_SIZE 7
+
+#define MAX_ERRORS 5
+#define MIN_PIX 0
+
+#define VITESSE 100
+#define TROP_PRES 9
+#define TROP_LOIN 21
+#define TROP_A_GAUCHE -11
+#define TROP_A_DROITE 11
+
+#define AVANCER 1
+#define STOPPER 0
+#define RECULER -1
 
 using namespace cv;
 using namespace std;
@@ -102,7 +100,9 @@ int main (int argc, char **argv) {
 	    saturationCustom = SATURATION_TOLERANCE,
 	    compteurErreurs = 0,
 	    rayon = 0,
-        key = 0;
+        key = 0,
+        videoHeight = video.get(CV_CAP_PROP_FRAME_HEIGHT),
+        videoWidth = video.get(CV_CAP_PROP_FRAME_WIDTH);
         
     float angle = 0.0, 
         distance = 0.0, 
@@ -113,14 +113,10 @@ int main (int argc, char **argv) {
 	    pause = false;
 	   
 	Mat frameOrigine,
-	    frame,
-	    frameNorma, 
-	    frame2,
-	    trace(
-	        video.get(CV_CAP_PROP_FRAME_HEIGHT), 
-	        video.get(CV_CAP_PROP_FRAME_WIDTH),
-	        CV_8UC3
-        ),
+	    frameCouleurs,
+	    frameDetection,
+	    frameTrace(videoHeight, videoWidth, CV_8UC3),
+        frameContours,
         element;
         
 	Point center(0, 0);
@@ -128,8 +124,6 @@ int main (int argc, char **argv) {
 	vector<Mat> channels;
 	
 	vector<vector<Point> > contours;
-	
-	Scalar intensity;
 	
 	ofstream output;
 	output.open(OUTPUT_FILE);
@@ -149,9 +143,9 @@ int main (int argc, char **argv) {
 	    if (! pause) {
 		    video >> frameOrigine;
 		}
-		frame = frameOrigine.clone();
+		frameCouleurs = frameOrigine.clone();
 		
-		if (frame.empty()) {
+		if (frameCouleurs.empty()) {
 		
 		    // Gestion des erreurs si l'image est vide
 			cout << "Problème frame\n";
@@ -166,55 +160,55 @@ int main (int argc, char **argv) {
 		    
 		    // Blur / Flou
 		    if (blur) {
-		        GaussianBlur(frame, frame, Size(9, 9), blur, blur);
+		        //GaussianBlur(frame, frame, Size(9, 9), blur, blur);
 		    }
 		    
 		    // Normalize
 		    if (norma) {
-		    	cvtColor(frame, frameNorma, CV_BGR2YCrCb); 
-		    	split(frameNorma, channels); 
+		    	cvtColor(frameCouleurs, frameCouleurs, CV_BGR2YCrCb); 
+		    	split(frameCouleurs, channels); 
 		    	equalizeHist(channels[0], channels[0]);
-		    	merge(channels,frameNorma); 
-			cvtColor(frameNorma, frame, CV_YCrCb2BGR); 
+		    	merge(channels,frameCouleurs); 
+			    cvtColor(frameCouleurs, frameCouleurs, CV_YCrCb2BGR); 
 		    }
 		    
 		    // BGR 2 HSV
-			cvtColor(frame, frame2, CV_BGR2HSV);
+			cvtColor(frameCouleurs, frameDetection, CV_BGR2HSV);
 			
 			// Couleur ciblée en blanc et le reste en noir
 			inRange(
-			    frame2, 
-		Scalar(hue - hueCustom, saturation - saturationCustom, 0), 
-		Scalar(hue + hueCustom, saturation + saturationCustom, 255), 
-                frame2
+			    frameDetection, 
+		        Scalar(hue - hueCustom, saturation - saturationCustom, 0), 
+		        Scalar(hue + hueCustom, saturation + saturationCustom, 255), 
+                frameDetection
             );
             
             // Erode
             element = getStructuringElement(MORPH_ELLIPSE, Size(ERODE_SIZE, ERODE_SIZE));    
-            erode(frame2, frame2, element);
+            erode(frameDetection, frameDetection, element);
             
             // Dilate
             element = getStructuringElement(MORPH_ELLIPSE, Size(DILATE_SIZE, DILATE_SIZE));    
-            dilate(frame2, frame2, element);           
+            dilate(frameDetection, frameDetection, element);           
             
             // Trouver l'objet
-            Mat frameContours = frame2.clone();
+            frameContours = frameDetection.clone();
             findContours(frameContours, contours, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE, Point(0, 0)); 
-            drawContours(frame2, contours, -1, Scalar(255, 255, 0));
+            drawContours(frameDetection, contours, -1, Scalar(255, 255, 0));
             findObject(contours, center, rayon);
             
             // Calculer angle distance et vitesses
-            angle = findRotation(center.x, FIELD_VIEW, frame2.size().width);
-            distance = findDistance(rayon, frame2.size().height);
+            angle = findRotation(center.x, FIELD_VIEW, videoWidth);
+            distance = findDistance(rayon, videoHeight);
             findVitesses(distance, angle, Rg, Rd);
                 
             // Ecrire la rotation, la distance et les vitesses
             if(! pause) {
                 output 
+                    << "Rg = " << Rg << " "
+                    << "Rd = " << Rd << " "
                     << "A = " << angle << "°            "
-                    << "D = " << distance << "cm        "
-                    << "Rg = " << Rg << "   "
-                    << "Rd = " << Rd << "\n" << endl;
+                    << "D = " << distance << "cm" << endl;
             }
             
             if (rayon <= 0) { rayon = 1; }
@@ -223,22 +217,22 @@ int main (int argc, char **argv) {
             if (tracer) {
             
                 // Fenêtre Base
-                circle(frame, center, 2, Scalar(0, 255, 0), -1); // centre
-                circle(frame, center, rayon, Scalar(0, 255, 0), 1); // périmètre
+                circle(frameCouleurs, center, 2, Scalar(0, 255, 0), -1); // centre
+                circle(frameCouleurs, center, rayon, Scalar(0, 255, 0), 1); // périmètre
                 
                 // Fenêtre Transformed
-                cvtColor(frame2, frame2, CV_GRAY2BGR);
-                circle(frame2, center, 2, Scalar(0, 0, 255), -1);
-                circle(frame2, center, rayon, Scalar(0, 0, 255), 1); 
+                cvtColor(frameDetection, frameDetection, CV_GRAY2BGR);
+                circle(frameDetection, center, 2, Scalar(0, 0, 255), -1);
+                circle(frameDetection, center, rayon, Scalar(0, 0, 255), 1); 
             }
             
             // Fenêtre Trace
-            circle(trace, center, 2, Scalar(0, 0, 255), -1);
-            circle(trace, center, rayon, Scalar(0, rayon * 5, 255), 1); 
+            circle(frameTrace, center, 2, Scalar(0, 0, 255), -1);
+            circle(frameTrace, center, rayon, Scalar(0, rayon * 5, 255), 1); 
             
-			imshow("base", frame);
-			imshow("transformed", frame2);
-			imshow("trace", trace);
+			imshow("base", frameCouleurs);
+			imshow("transformed", frameDetection);
+			imshow("trace", frameTrace);
 		}
 		
 		// Rafraîchissement
@@ -249,7 +243,7 @@ int main (int argc, char **argv) {
 	            break;
             case -1 :
                 break;
-            default :
+            default :cout << key;
                 continuer = false;
                 break;
 		}
@@ -260,9 +254,10 @@ int main (int argc, char **argv) {
 	element.release();
 	video.release();
 	frameOrigine.release();
-	frame.release();
-	frame2.release();
-	trace.release();
+	frameCouleurs.release();
+	frameDetection.release();
+	frameTrace.release();
+	frameContours.release();
 	output.close();
 	
 	cout << "Fin\n";
@@ -345,29 +340,40 @@ float findDistance(int rayon, int imageH) {
     else { return 0; }
 }
 
-void findVitesses(float distance, float angle, float & Rg, float & Rd){
+void findVitesses(float distanceObjet, float angleObjet, float & gauche, float & droite){
     
-    float diff = abs(angle) / 90;
+    float diff = abs(angleObjet) / 90;
     
-    if (distance < DIST_SECURE_MIN and distance > 0) {
-        Rg = -1;
-        Rd = -1;
-        if (angle > 0) { Rg = 0 - diff; }
-        else if (angle < 0) { Rd = 0 - diff; }
+    // L'objet est trop loin
+    if (distanceObjet >= TROP_LOIN and distanceObjet < 1000) {
+        gauche = AVANCER;
+        droite = AVANCER;
+        if (angleObjet > 0) { droite -= diff; }
+        else if (angleObjet < 0) { gauche -= diff; }
     }
-    else if (distance > DIST_SECURE_MAX and distance < 1000) {
-        Rg = 1;
-        Rd = 1;
-        if (angle > 0) { Rg = 1 - diff; }
-        else if (angle < 0) { Rd = 1 - diff; }
+    // L'objet est trop près
+    else if (distanceObjet <= TROP_PRES and distanceObjet > 0) {
+        gauche = RECULER;
+        droite = RECULER;
+        if (angleObjet > 0) { gauche += diff; }
+        else if (angleObjet < 0) { droite += diff; }
     }
-    else {
-        if (angle > 0) { Rg = 1; Rd = -1; }
-        else if (angle < 0) { Rg = -1; Rd = 1; }
-        else { Rg = 0; Rd = 0; }
+    else { // L'objet est à distance adéquate
+        if (angleObjet >= TROP_A_DROITE) { 
+            gauche = diff; 
+            droite = -diff; 
+        }
+        else if (angleObjet <= TROP_A_GAUCHE) { 
+            gauche = -diff; 
+            droite = diff; 
+        }
+        else { 
+            gauche = STOPPER; 
+            droite = STOPPER; 
+        }
     }
     
-    Rg *= 300;
-    Rd *= 300;
+    gauche *= VITESSE;
+    droite *= VITESSE;
 }
 
