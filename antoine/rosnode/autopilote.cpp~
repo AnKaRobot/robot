@@ -255,7 +255,7 @@ int main (int argc, char **argv) {
 		}
 		
 		// Rafraîchissement
-		/*key = waitKey(REFRESH);
+		key = waitKey(REFRESH);
 		switch (key) {
 		    case PAUSE_KEY :
 		        pause = pause ? false : true;
@@ -263,7 +263,7 @@ int main (int argc, char **argv) {
             case EXIT_KEY :
                 continuer = false;
                 break;
-		}*/
+		}
 		
 	}
 

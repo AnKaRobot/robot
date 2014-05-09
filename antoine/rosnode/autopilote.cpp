@@ -1,10 +1,10 @@
-#include <iostream>
+/*#include <iostream>
 #include <fstream>
-#include <string>
+#include <string>*/
 #include <opencv2/opencv.hpp>
 
-#define SOURCE_FILE "source"
-#define OUTPUT_FILE "output"
+/*#define SOURCE_FILE "source"
+#define OUTPUT_FILE "output"*/
 
 // C920 Logitech
 #define FIELD_VIEW 78
@@ -15,9 +15,9 @@
 
 #define OBJECT_HEIGHT 3
 
-#define REFRESH 30
+/*#define REFRESH 30
 #define PAUSE_KEY 32
-#define EXIT_KEY 10
+#define EXIT_KEY 10*/
 
 #define HUE_BASE 180
 #define HUE_TOLERANCE 20
@@ -39,6 +39,29 @@
 #define STOPPER 0
 #define RECULER -1
 
+#include "ros/ros.h"
+#include <geometry_msgs/Twist.h>
+
+#include <iostream>
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <time.h>
+#include <std_msgs/String.h>
+#include <String>
+#include <fstream>
+#include <sstream>
+
+#include "systeme_robot/Autopilote_trajectoire.h"
+
+#include <opencv2/imgproc.hpp>
+#include <opencv2/highgui/highgui.hpp>
+
+#define START_MYLOG std::ofstream fichierlog("/tmp/monlog", std::ios::out);
+#define WRITE_MYLOG(x) {fichierlog << (x);}
+#define CLOSE_MYLOG fichierlog.close();
+
 using namespace cv;
 using namespace std;
 
@@ -50,10 +73,54 @@ void findObject(vector<vector<Point> > contours, Point & center, int & rayon);
 
 int main (int argc, char **argv) {
     
-	cout << "Début\n";
+	//cout << "Début\n";
+    
+    	//Initialisation du systeme ROS
+        ros::init(argc,argv,"Autopilote");
+
+        //lien vers le systeme
+        ros::NodeHandle n;
+
+        /*
+        Publisher sur le topic entre le node Autopilote et le node Trajectoire.
+        */
+        ros::Publisher publisher = n.advertise<systeme_robot::Autopilote_trajectoire>("autopilote_trajectoire",1000);
+
+
+        // Frequence de 10hz
+        ros::Rate loop_rate(10);
+
+
+        /*struct stat info;
+        time_t lastUpdate;
+        time_t currentTime;
+        long int differenceSecondes;
+        */
+        // Message echangee entre le node Autopilote et le node Trajectoire
+        systeme_robot::Autopilote_trajectoire msg;
+
+        START_MYLOG;
+
+
+
+
+        // si la difference est superieur a un certain nombre de seconde ou si on ne le lit pas
+        /*
+        msg.mode = "s";
+        msg.vlineaire = 0.0;
+        msg.vangulaire = 0.0;
+        msg.vitesseRoueG = 0;
+        msg.vitesseRoueD = 0;
+        */
+
+        /* char buf[1024];
+        sprintf(buf,"ordre: %d %d", x, y);
+        ROS_INFO("%s", buf);
+        WRITE_MYLOG(buf);
+        */
     
     // Capture de la source
-    ifstream sourceFile;
+    /*ifstream sourceFile;
     string source;
     sourceFile.open(SOURCE_FILE);
     getline(sourceFile, source);
@@ -66,17 +133,20 @@ int main (int argc, char **argv) {
         default:
             video.open(0);
             break;
-    }
+    }*/
+    
+    VideoCapture video;
+    video.open(0);
     
     
     // Gestion des erreurs si la capture est vide
 	if (! video.isOpened()) {
-		cout << "Problème source\n";
+		//cout << "Problème source\n";
 		return -1;
 	}
 
     // Création des fenêtres
-	namedWindow("trace", CV_WINDOW_NORMAL);
+	/*namedWindow("trace", CV_WINDOW_NORMAL);
 	namedWindow("panel", CV_WINDOW_NORMAL);
 	namedWindow("transformed", CV_WINDOW_NORMAL);
 	namedWindow("base", CV_WINDOW_NORMAL);
@@ -89,7 +159,7 @@ int main (int argc, char **argv) {
 	moveWindow("base", 0, 0);
 	moveWindow("transformed", 520, 550);
 	moveWindow("panel", 0, 410);
-	moveWindow("trace", 520, 0);
+	moveWindow("trace", 520, 0);*/
 	
 	// Déclaration des variables utilisées
 	int blur = 1,
@@ -129,9 +199,9 @@ int main (int argc, char **argv) {
 	
 	vector<vector<Point> > contours;
 	
-	ofstream output;
-	output.open(OUTPUT_FILE);
-
+	/*ofstream output;
+	output.open(OUTPUT_FILE);*/
+    /*
     // Création des barres de sélection	
 	//createTrackbar("blur", "panel", &blur, 5);
 	createTrackbar("trace", "panel", &tracer, 1);
@@ -141,10 +211,13 @@ int main (int argc, char **argv) {
 	createTrackbar("saturation tolerance", "panel", &saturationCustom, 100);
 	createTrackbar("norma", "panel", &norma, 1);
 	createTrackbar("Inverse Red Range", "panel", &inverseRed, 1);
+	*/
 	
 	
-	
-	while (continuer) {
+		while(ros::ok()) {	// boucle principale ros node
+            ros::spinOnce();
+
+            loop_rate.sleep();
 	
 	    // Récupération d'une image
 	    if (! pause) {
@@ -153,14 +226,14 @@ int main (int argc, char **argv) {
 		frameCouleurs = frameOrigine.clone();
 		
 		if (frameCouleurs.empty()) {
-		
+		/*
 		    // Gestion des erreurs si l'image est vide
 			cout << "Problème frame\n";
 			compteurErreurs ++;
 			if (compteurErreurs > MAX_ERRORS) {
 	            cout << "Arrêt : 6 frames erronées consécutives\n";
 	            continuer = false;
-			}
+			}*/
 		}
 		else {
 		    compteurErreurs = 0;
@@ -221,6 +294,18 @@ int main (int argc, char **argv) {
             distance = findDistance(rayon, videoHeight);
             findVitesses(distance, angle, Rg, Rd);
                 
+                
+        	msg.vitesseRoueG = Rg;
+            msg.vitesseRoueD = Rd;	
+
+            publisher.publish(msg);	
+
+            char buf[1024];
+            sprintf(buf,"ordre: G:%f D:%f dis:%fcm ang:%f", Rg, Rd, distance, angle);
+            ROS_INFO("%s", buf);
+            WRITE_MYLOG(buf);	    
+            
+            /*
             // Ecrire la rotation, la distance et les vitesses
             if(! pause) {
                 output 
@@ -255,7 +340,7 @@ int main (int argc, char **argv) {
 		}
 		
 		// Rafraîchissement
-		/*key = waitKey(REFRESH);
+		key = waitKey(REFRESH);
 		switch (key) {
 		    case PAUSE_KEY :
 		        pause = pause ? false : true;
@@ -263,7 +348,8 @@ int main (int argc, char **argv) {
             case EXIT_KEY :
                 continuer = false;
                 break;
-		}*/
+		}
+		*/
 		
 	}
 
@@ -278,10 +364,10 @@ int main (int argc, char **argv) {
 	frameDetectionInverseRed.release();
 	frameTrace.release();
 	frameContours.release();
-	output.close();
+	//output.close();
 	
-	cout << "Fin\n";
-    
+	//cout << "Fin\n";
+    CLOSE_MYLOG;
 	return 0;
 }
 
