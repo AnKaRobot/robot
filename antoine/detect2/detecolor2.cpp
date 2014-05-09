@@ -13,7 +13,7 @@
 #define SENSOR_W 4.8
 #define SENSOR_H 3.6
 
-#define OBJECT_HEIGHT 3
+#define OBJECT_HEIGHT 30
 
 #define REFRESH 30
 #define PAUSE_KEY 32
@@ -22,21 +22,21 @@
 #define HUE_BASE 180
 #define HUE_TOLERANCE 20
 #define SATURATION_BASE 186 // 255
-#define SATURATION_TOLERANCE 40 // 60
+#define SATURATION_TOLERANCE 60 // 60
 #define DILATE_SIZE 2
 #define ERODE_SIZE 7
 
 #define HUE_BASE_INVERSE 0
 #define HUE_TOLERANCE_INVERSE 5
-#define SATURATION_BASE_INVERSE 186
+#define SATURATION_BASE_INVERSE 184
 #define SATURATION_TOLERANCE_INVERSE 60
 
 #define MAX_ERRORS 5
 #define MIN_PIX 0
 
-#define VITESSE 100
-#define TROP_PRES 9
-#define TROP_LOIN 21
+#define VITESSE 50
+#define TROP_PRES 30
+#define TROP_LOIN 100
 #define TROP_A_GAUCHE -11
 #define TROP_A_DROITE 11
 
@@ -69,7 +69,7 @@ int main (int argc, char **argv) {
             video.open(source.substr(2));
             break;
         default:
-            video.open(1);
+            video.open(0);
             break;
     }
     
