@@ -21,10 +21,15 @@
 
 #define HUE_BASE 180
 #define HUE_TOLERANCE 20
-#define SATURATION_BASE 255
-#define SATURATION_TOLERANCE 60
+#define SATURATION_BASE 186 // 255
+#define SATURATION_TOLERANCE 40 // 60
 #define DILATE_SIZE 2
 #define ERODE_SIZE 7
+
+#define HUE_BASE_INVERSE 0
+#define HUE_TOLERANCE_INVERSE 5
+#define SATURATION_BASE_INVERSE 186
+#define SATURATION_TOLERANCE_INVERSE 60
 
 #define MAX_ERRORS 5
 #define MIN_PIX 0
@@ -64,7 +69,7 @@ int main (int argc, char **argv) {
             video.open(source.substr(2));
             break;
         default:
-            video.open(0);
+            video.open(1);
             break;
     }
     
@@ -100,6 +105,10 @@ int main (int argc, char **argv) {
 	    saturation = SATURATION_BASE,
 	    hueCustom = HUE_TOLERANCE,
 	    saturationCustom = SATURATION_TOLERANCE,
+	    hueInverse = HUE_BASE_INVERSE,
+	    hueToleranceInverse = HUE_TOLERANCE_INVERSE,
+	    saturationInverse = SATURATION_BASE_INVERSE,
+	    saturationToleranceInverse = SATURATION_TOLERANCE_INVERSE,
 	    compteurErreurs = 0,
         key = 0,
         videoHeight = video.get(CV_CAP_PROP_FRAME_HEIGHT),
@@ -135,10 +144,17 @@ int main (int argc, char **argv) {
     // Création des barres de sélection	
 	//createTrackbar("blur", "panel", &blur, 5);
 	createTrackbar("trace", "panel", &tracer, 1);
-	//createTrackbar("hue base", "panel", &hue, 180);
-	//createTrackbar("saturation base", "panel", &saturation, 255);
+	
+	createTrackbar("hue base", "panel", &hue, 180);
+	createTrackbar("saturation base", "panel", &saturation, 255);
 	createTrackbar("hue tolerance", "panel", &hueCustom, 100);
 	createTrackbar("saturation tolerance", "panel", &saturationCustom, 100);
+	
+	createTrackbar("hue base Inverse", "panel", &hueInverse, 180);
+	createTrackbar("saturation base Inverse", "panel", &saturationInverse, 255);
+	createTrackbar("hue tolerance Inverse", "panel", &hueToleranceInverse, 100);
+	createTrackbar("saturation tolerance Inverse", "panel", &saturationToleranceInverse, 100);
+	
 	createTrackbar("norma", "panel", &norma, 1);
 	createTrackbar("Inverse Red Range", "panel", &inverseRed, 1);
 	
@@ -195,8 +211,8 @@ int main (int argc, char **argv) {
             if (inverseRed) {
                 inRange(
 			        frameHSV, 
-		            Scalar(0, saturation - saturationCustom, 0), 
-		            Scalar(5, saturation + saturationCustom, 255), 
+		            Scalar(hueInverse - hueToleranceInverse, saturationInverse - saturationToleranceInverse, 0), 
+		            Scalar(hueInverse + hueToleranceInverse, saturationInverse + saturationToleranceInverse, 255), 
                     frameDetectionInverseRed
                 );
                 addWeighted(frameDetection, 1, frameDetectionInverseRed, 1, 0, frameDetection, frameDetection.type());
