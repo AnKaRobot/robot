@@ -22,7 +22,7 @@
 #define HUE_BASE 180
 #define HUE_TOLERANCE 20
 #define SATURATION_BASE 255
-#define SATURATION_TOLERANCE 39
+#define SATURATION_TOLERANCE 60
 #define DILATE_SIZE 2
 #define ERODE_SIZE 7
 
@@ -141,6 +141,8 @@ int main (int argc, char **argv) {
 	createTrackbar("saturation tolerance", "panel", &saturationCustom, 100);
 	createTrackbar("norma", "panel", &norma, 1);
 	createTrackbar("Inverse Red Range", "panel", &inverseRed, 1);
+	
+	
 	
 	while (continuer) {
 	
@@ -262,6 +264,7 @@ int main (int argc, char **argv) {
                 continuer = false;
                 break;
 		}
+		
 	}
 
     // Libération de mémoire
