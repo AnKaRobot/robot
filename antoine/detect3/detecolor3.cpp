@@ -4,217 +4,262 @@
 #include <opencv2/opencv.hpp>
 #include <libconfig.h++>
 
-// SOURCE ET OUTPUT
-#define SOURCE_FILE "source" // source
-#define OUTPUT_FILE "output" // output
-#define OUTPUT_VIDEO_FILE "videoutput.avi" // videoutput.avi
-#define DETECTION_FILE "detectionFile" // detectionFile
-
-#define OUTPUT_VALEURS true // true
-#define OUTPUT_VIDEO true // true
-// ================||
-
-// VALEURS CAMERA (default : logitech C92)
-#define FIELD_VIEW 78 // 78
-#define FOCALE_LEN 3.67 // 3.67
-#define SENSOR_DIAG 6.0 // 6.0
-#define SENSOR_W 4.8 // 4.8
-#define SENSOR_H 3.6 // 3.6
-// ==============||
-
-// CARACTERISTIQUES OBJET
-#define OBJECT_HEIGHT 8 // 10
-// ======================||
-
-// BOUCLE OPENCV
-#define REFRESH 30 // 30
-#define PAUSE_KEY 32 // 32
-#define EXIT_KEY 10 // 10
-// =============||
-
-// VALEURS PANEL DETECTION
-#define BLUR 5
-
-#define HUE_BASE 180 // 180
-#define HUE_TOLERANCE 5 // 20
-#define SATURATION_BASE 255 // 186
-#define SATURATION_TOLERANCE 165 // 60
-
-#define HUE_BASE_INVERSE 0 // 0
-#define HUE_TOLERANCE_INVERSE 0 // 5
-#define SATURATION_BASE_INVERSE 255 // 184
-#define SATURATION_TOLERANCE_INVERSE 165 // 60
-
-#define ERODE_SIZE 10 // 7
-#define DILATE_SIZE 0 // 2
-// =====================||
-
-// CHOIX DES VITESSES DES ROUES
-#define VITESSE 50 // 50
-#define TROP_PRES 30 // 30
-#define TROP_LOIN 100 // 100
-#define TROP_A_GAUCHE -11 // -11
-#define TROP_A_DROITE 11 // 11
+#define CONFIG_FILE "config.cfg" // detectionFile
 
 #define AVANCER 1 // 1
 #define STOPPER 0 // 0
 #define RECULER -1 // -1
-// =============================||
-
-// COMPORTEMENT DU ROBOT
-#define MAXIMUM_DEPLACEMENT_POSSIBLE 20 // 20
-// =====================||
-
 
 using namespace cv;
 using namespace std;
-
+using namespace libconfig;
 
 // Fonctions utilisées
-float findRotation(int center, float angleView, int widthImage);
-float findDistance(int rayon, int imageH);
-void findVitesses(float distance, float angle, float & Rg, float & Rd);
-void findObject(vector<vector<Point> > contours, Point & center, int & rayon);
+void createWindows (Config & config);
+float findRotation (int center, float angleView, int widthImage);
+float findDistance (int rayon, int imageH, float focaleLength, float objectHeight, float sensorHeight);
+void findVitesses (float distance, float angle, float & Rg, float & Rd,
+	float tropPres, float tropLoin, float tropAGauche, float tropADroite, float vitesse);
+void findObject (vector<vector<Point> > contours, Point & center, int & rayon);
 
 
 int main (int argc, char **argv) {
     
 	cout << "Début\n";
-    
-    // Capture de la source
-    ifstream sourceFile;
-    string source;
-    
-    sourceFile.open(SOURCE_FILE);
-    
-    if(sourceFile.is_open()) {
-		getline(sourceFile, source);
-		sourceFile.close();
-	}
-	else { source = "0"; }
-	
-    VideoCapture video;
-    switch (source[0]) {
-        case 'v':
-            video.open(source.substr(2));
-            break;
-        default:
-            video.open(0);
-            break;
-    }
-    
-    
-    // Gestion des erreurs si la capture est vide
-	if (! video.isOpened()) {
-		cout << "Problème source\n";
-		return -1;
-	}
 
-    // Création des fenêtres
-	namedWindow("trace", CV_WINDOW_NORMAL);
-	namedWindow("panel", CV_WINDOW_NORMAL);
-	namedWindow("transformed", CV_WINDOW_NORMAL);
-	namedWindow("base", CV_WINDOW_NORMAL);
+	// DECLARATIONS ===========[
 	
-	resizeWindow("base", 500, 375);
-	resizeWindow("transformed", 500, 375);
-	resizeWindow("panel", 500, 750);
-	resizeWindow("trace", 500, 375);
+	Config config;
 	
-	moveWindow("base", 0, 0);
-	moveWindow("transformed", 0, 375);
-	moveWindow("panel", 500, 0);
-	moveWindow("trace", 1000, 0);
+	VideoCapture video;
 	
-	// Déclaration des variables utilisées
-	int blur = BLUR,
-	    tracer = 1,
-	    norma = 1,
-	    inverseRed = 1,
-	    hue = HUE_BASE,
-	    saturation = SATURATION_BASE,
-	    hueCustom = HUE_TOLERANCE,
-	    saturationCustom = SATURATION_TOLERANCE,
-	    hueInverse = HUE_BASE_INVERSE,
-	    hueToleranceInverse = HUE_TOLERANCE_INVERSE,
-	    saturationInverse = SATURATION_BASE_INVERSE,
-	    saturationToleranceInverse = SATURATION_TOLERANCE_INVERSE,
-	    compteurErreurs = 0,
-        key = 0,
-        videoHeight = video.get(CV_CAP_PROP_FRAME_HEIGHT),
-        videoWidth = video.get(CV_CAP_PROP_FRAME_WIDTH),
-	    rayon = max(videoWidth, videoHeight),
-	    erodeSize = ERODE_SIZE,
-	    dilateSize = DILATE_SIZE;
-        
-    float angle = 0.0,
-    	newAngle = 0.0, 
-        distance = 0.0, 
-        newDistance = 0.0,
-        Rg = 0.0, 
-        Rd = 0.0;
+	int blur,
+	    normalisation,
+	    erodeSize,
+	    dilateSize,
+	    
+	    hueBase,
+	    saturationBase,
+	    hueTolerance,
+	    saturationTolerance,
+	    valueBase,
+	    valueTolerance,
+	    
+	    useInRange2,
+	    
+	    hueBase2,
+	    hueTolerance2,
+	    saturationBase2,
+	    saturationTolerance2,
+	    valueBase2,
+	    valueTolerance2,
+	    
+	    tracer,
+	    compteurErreurs,
+        key,
+	    rayon,
+	    maximumStep,
+	    
+	    refreshValue;
+	    
+    float angle,
+    	newAngle, 
+        distance, 
+        newDistance,
+        Rg, 
+        Rd,
+	    vitesseRobot,
+	    objectHeight,
+	    
+	    tropPres,
+    	tropLoin,
+    	tropAGauche,
+    	tropADroite,
+
+		focaleLengthValue,
+    	sensorHeightValue,
+    	fieldViewValue;
 	
-	bool continuer = true,
-	    pause = false,
-	    registerVideo = OUTPUT_VIDEO,
-	    registerValeurs = OUTPUT_VALEURS;
+	bool continuer,
+	    pause,
+	    registerVideo,
+	    registerFile,
+	    
+	    useWindowsValue;
 	   
 	Mat frameOrigine,
 	    frameCouleurs,
 	    frameHSV,
 	    frameDetection,
 	    frameDetectionInverseRed,
-	    frameTrace(videoHeight, videoWidth, CV_8UC3),
+	    frameTrace,
         frameContours,
-        frameOutput(videoHeight, videoWidth * 3, CV_8UC3),
+        frameOutput,
         element;
         
-	Point center((int)(videoWidth / 2) , (int)(videoHeight / 2));
+	Point center;
 	
-	vector<Mat> channels, outputFrames(3);
+	vector<Mat> 
+		channels, 
+		outputFrames(3);
 	
 	vector<vector<Point> > contours;
 	
 	VideoWriter outputVideo;
-	outputVideo.open(
-		OUTPUT_VIDEO_FILE, 
-		CV_FOURCC('M', 'J', 'P', 'G'), 
-		10, 
-		Size(videoWidth * 3, videoHeight), 
-		true
-	);
+	
+	ofstream output;
+	
+	// FIN DECLARATIONS ==============]
+	
+	
+	// AFFECTATIONS ===================[
+	
+	config.readFile(CONFIG_FILE);
+    
+    try {
+		switch ((int) config.lookup("source.type")) {
+			case 0 : // webcam
+				video.open( (int) config.lookup("source.value"));
+				break;
+			case 1 : // file
+				video.open( (const char*) config.lookup("source.value"));
+				break;	
+		}	
+	}
+   	catch (SettingException & e) {
+   		cout << "Erreur Configuration\n";
+		cout << e.getPath() << endl;    
+	}
+	// Gestion des erreurs si la capture est vide
+	if (! video.isOpened()) {
+		cout << "Problème source\n";
+		return -1;
+	}
+    
+    const int videoHeight = video.get(CV_CAP_PROP_FRAME_HEIGHT),
+        videoWidth = video.get(CV_CAP_PROP_FRAME_WIDTH);
+        
+    try {
+	    refreshValue = config.lookup("opencvBoucle.refresh");
+	   	blur = config.lookup("detection.blur");
+	    normalisation = config.lookup("detection.normalisation");
+	    erodeSize = config.lookup("detection.erodeSize");
+	    dilateSize = config.lookup("detection.dilateSize");
+	    
+	    hueBase = config.lookup("detection.inRange.hue.baseValue");
+	    saturationBase = config.lookup("detection.inRange.saturation.baseValue");
+	    hueTolerance = config.lookup("detection.inRange.hue.tolerance");
+	    saturationTolerance = config.lookup("detection.inRange.saturation.tolerance");
+	    valueBase = config.lookup("detection.inRange.value.baseValue");
+	    valueTolerance = config.lookup("detection.inRange.value.tolerance");
+	    
+	    useInRange2 = config.lookup("detection.useInRange2");
+	    
+	    hueBase2 = config.lookup("detection.inRange2.hue.baseValue");
+	    hueTolerance2 = config.lookup("detection.inRange2.hue.tolerance");
+	    saturationBase2 = config.lookup("detection.inRange2.saturation.baseValue");
+	    saturationTolerance2 = config.lookup("detection.inRange2.saturation.tolerance");
+	    valueBase2 = config.lookup("detection.inRange2.value.baseValue");
+	    valueTolerance2 = config.lookup("detection.inRange2.value.tolerance");
+	    
+	    tracer = 1;
+	    compteurErreurs = 0;
+        key = 0;
+	    rayon = max(videoWidth, videoHeight);
+	    maximumStep = config.lookup("analyseObjet.distance.maximumStep");
+	    
+	    angle = 0.0;
+    	newAngle = 0.0;
+        distance = 0.0;
+        newDistance = 0.0;
+        Rg = 0.0;
+        Rd = 0.0;
+	    vitesseRobot = config.lookup("robot.vitesse");
+	    objectHeight = config.lookup("objectHeight");
+        
+    	tropPres = config.lookup("analyseObjet.distance.tropPres");
+    	tropLoin = config.lookup("analyseObjet.distance.tropLoin");
+    	tropAGauche = config.lookup("analyseObjet.angle.tropAGauche");
+    	tropADroite = config.lookup("analyseObjet.angle.tropADroite");
+    	
+		focaleLengthValue = config.lookup("camera.focaleLength"),
+    	sensorHeightValue = config.lookup("camera.sensorHeight"),
+    	fieldViewValue = config.lookup("camera.fieldView");
+	
+		continuer = true,
+	    pause = false,
+	    registerVideo = config.lookup("output.registerVideo"),
+	    registerFile = config.lookup("output.registerFile");
+	    
+		useWindowsValue = config.lookup("windows.useWindows");
+	   
+		frameTrace = Mat(videoHeight, videoWidth, CV_8UC3),
+        frameOutput = Mat(videoHeight, videoWidth * 3, CV_8UC3);
+        
+		center = Point((int)(videoWidth / 2) , (int)(videoHeight / 2));
+	
+		outputVideo.open(
+			(const char*) config.lookup("output.video.file"),
+			CV_FOURCC('M', 'J', 'P', 'G'), 
+			config.lookup("output.video.fps"), 
+			Size(videoWidth * 3, videoHeight), 
+			true
+		);
+		
+		output.open((const char*) config.lookup("output.file"));
+	}
+	catch (SettingException & e) {
+		cout << "Erreur Configuration\n";
+		cout << e.getPath() << endl;  
+		return -1;  
+    }
+	
+	const int refresh = refreshValue;
+	
+	const float focaleLength = focaleLengthValue,
+		sensorHeight = sensorHeightValue,
+		fieldView = fieldViewValue;
+		
+	const bool useWindows = useWindowsValue;
+	
+	// FIN AFFECTATIONS =======================]
+	
+	
+	// Gestion des erreurs output
 	if (! outputVideo.isOpened()) {
 		cout << "Problème output video.\n";
 		registerVideo = false;
 	} 
+	if (! output.is_open()) { registerFile = false; }
 	
-	ofstream output;
-	output.open(OUTPUT_FILE);
-	if (! output.is_open()) { registerValeurs = false; }
+	
+	// Creation des fenetres
+	if (useWindows) { createWindows(config); }
 
     // Création des barres de sélection	
-	createTrackbar("Valeur de flou", "panel", &blur, 30);
-	createTrackbar("Appliquer l'égalisation d'histogramme", "panel", &norma, 1);
+    if (useWindows) {
+		createTrackbar("Valeur de flou", "panel", &blur, 30);
+		createTrackbar("Appliquer l'égalisation d'histogramme", "panel", &normalisation, 1);
 	
-	createTrackbar("hue base", "panel", &hue, 180);
-	createTrackbar("saturation base", "panel", &saturation, 255);
-	createTrackbar("hue tolerance", "panel", &hueCustom, 180);
-	createTrackbar("saturation tolerance", "panel", &saturationCustom, 255);
+		createTrackbar("hue base", "panel", &hueBase, 180);
+		createTrackbar("saturation base", "panel", &saturationBase, 255);
+		createTrackbar("hue tolerance", "panel", &hueTolerance, 180);
+		createTrackbar("saturation tolerance", "panel", &saturationTolerance, 255);
 	
-	createTrackbar("hue base Inverse", "panel", &hueInverse, 180);
-	createTrackbar("saturation base Inverse", "panel", &saturationInverse, 255);
-	createTrackbar("hue tolerance Inverse", "panel", &hueToleranceInverse, 180);
-	createTrackbar("saturation tolerance Inverse", "panel", &saturationToleranceInverse, 255);
+		createTrackbar("hue base Inverse", "panel", &hueBase2, 180);
+		createTrackbar("saturation base Inverse", "panel", &saturationBase2, 255);
+		createTrackbar("hue tolerance Inverse", "panel", &hueTolerance2, 180);
+		createTrackbar("saturation tolerance Inverse", "panel", &saturationTolerance2, 255);
 	
-	createTrackbar("Taille Erode", "panel", &erodeSize, 30);
-	createTrackbar("Taille Dilate", "panel", &dilateSize, 30);
+		createTrackbar("Taille Erode", "panel", &erodeSize, 30);
+		createTrackbar("Taille Dilate", "panel", &dilateSize, 30);
 	
-	createTrackbar("Appliquer la détection inverse", "panel", &inverseRed, 1);
+		createTrackbar("Appliquer la détection inverse", "panel", &useInRange2, 1);
 	
-	createTrackbar("Afficher la détection", "panel", &tracer, 1);
+		createTrackbar("Afficher la détection", "panel", &tracer, 1);
+	}
 	
-	
-	
+	// Boucle OpenCV
 	while (continuer) {
 	
 	    // Récupération d'une image
@@ -242,7 +287,7 @@ int main (int argc, char **argv) {
 		    }
 		    
 		    // Normalize
-		    if (norma) {
+		    if (normalisation) {
 		    	cvtColor(frameCouleurs, frameCouleurs, CV_BGR2YCrCb); 
 		    	split(frameCouleurs, channels); 
 		    	equalizeHist(channels[0], channels[0]);
@@ -257,20 +302,42 @@ int main (int argc, char **argv) {
             
 			inRange(
 			    frameHSV, 
-		        Scalar(hue - hueCustom, saturation - saturationCustom, 0), 
-		        Scalar(hue + hueCustom, saturation + saturationCustom, 255), 
+		        Scalar(
+		        	hueBase - hueTolerance, 
+		        	saturationBase - saturationTolerance, 
+		        	valueBase - valueTolerance), 
+		        Scalar(
+		        	hueBase + hueTolerance, 
+		        	saturationBase + saturationTolerance, 
+		        	valueBase + valueTolerance), 
                 frameDetection
             );
             
             // Autre rouge (il y a la teinte 180 et la 0)
-            if (inverseRed) {
+            if (useInRange2) {
                 inRange(
 			        frameHSV, 
-		            Scalar(hueInverse - hueToleranceInverse, saturationInverse - saturationToleranceInverse, 0), 
-		            Scalar(hueInverse + hueToleranceInverse, saturationInverse + saturationToleranceInverse, 255), 
+		            Scalar(
+		            	hueBase2 - hueTolerance2, 
+		            	saturationBase2 - saturationTolerance2, 
+		            	valueBase2 - valueTolerance2
+	            	), 
+		            Scalar(
+		            	hueBase2 + hueTolerance2, 
+		            	saturationBase2 + saturationTolerance2, 
+		            	valueBase2 + valueTolerance2
+	            	), 
                     frameDetectionInverseRed
                 );
-                addWeighted(frameDetection, 1, frameDetectionInverseRed, 1, 0, frameDetection, frameDetection.type());
+                addWeighted(
+                	frameDetection, 
+                	1, 
+                	frameDetectionInverseRed, 
+                	1, 
+                	0, 
+                	frameDetection, 
+                	frameDetection.type()
+            	);
             }
             
             // Erode
@@ -298,17 +365,33 @@ int main (int argc, char **argv) {
             findObject(contours, center, rayon);
             
             // Calculer angle distance et vitesses
-            newDistance = findDistance(rayon, videoHeight);
-	        newAngle = findRotation(center.x, FIELD_VIEW, videoWidth);
+            newDistance = findDistance(
+            	rayon, 
+            	videoHeight,
+            	focaleLength,
+            	objectHeight,
+            	sensorHeight
+            );
+	        newAngle = findRotation(center.x, fieldView, videoWidth);
 	        // Amelioration de comportement quand detection defaillante
-            if (abs(distance - newDistance) > MAXIMUM_DEPLACEMENT_POSSIBLE) {
+            if (abs(distance - newDistance) > maximumStep) {
             	Rg = STOPPER;
             	Rd = STOPPER;
             }
             else {
             	distance = newDistance;
             	angle = newAngle;
-	        	findVitesses(distance, angle, Rg, Rd);
+	        	findVitesses(
+	        		distance, 
+	        		angle, 
+	        		Rg, 
+	        		Rd,
+	        		tropPres,
+	        		tropLoin,
+	        		tropADroite,
+	        		tropAGauche,
+	        		vitesseRobot
+        		);
            	}
                 
             
@@ -332,7 +415,7 @@ int main (int argc, char **argv) {
             circle(frameTrace, center, rayon, Scalar(0, rayon * 5, 255), 1); 
             
 			imshow("base", frameCouleurs);
-			imshow("transformed", frameDetection);
+			imshow("detection", frameDetection);
 			imshow("trace", frameTrace);
 			
 			// Output
@@ -344,7 +427,7 @@ int main (int argc, char **argv) {
 		        	hconcat(outputFrames, frameOutput);
 		        	outputVideo << frameOutput;
             	}
-            	if (registerValeurs) {
+            	if (registerFile) {
 		            output 
 		                << "Rg = " << Rg << " "
 		                << "Rd = " << Rd << " "
@@ -356,12 +439,12 @@ int main (int argc, char **argv) {
 		}
 		
 		// Rafraîchissement
-		key = waitKey(REFRESH);
+		key = waitKey(refresh);
 		switch (key) {
-		    case PAUSE_KEY :
+		    case 32 : // Pause, spacebar
 		        pause = pause ? false : true;
 	            break;
-            case EXIT_KEY :
+            case 10 : // Exit, enter
                 continuer = false;
                 break;
 		}
@@ -386,6 +469,50 @@ int main (int argc, char **argv) {
 	cout << "Fin\n";
     
 	return 0;
+}
+
+void createWindows (Config & config) {
+	try {
+		namedWindow("base", CV_WINDOW_NORMAL);
+		namedWindow("detection", CV_WINDOW_NORMAL);
+		namedWindow("panel", CV_WINDOW_NORMAL);
+		namedWindow("trace", CV_WINDOW_NORMAL);
+	
+	
+		moveWindow("base", config.lookup("windows.base.x"), config.lookup("windows.base.y"));
+		moveWindow(
+			"detection", 
+			config.lookup("windows.detection.x"), 
+			config.lookup("windows.detection.y")
+		);
+		moveWindow("panel", config.lookup("windows.panel.x"), config.lookup("windows.panel.y"));
+		moveWindow("trace", config.lookup("windows.trace.x"), config.lookup("windows.trace.y"));
+	
+		resizeWindow(
+			"base", 
+			config.lookup("windows.base.width"), 
+			config.lookup("windows.base.height")
+		);
+		resizeWindow(
+			"detection",
+			config.lookup("windows.detection.width"),
+			config.lookup("windows.detection.height")
+		);
+		resizeWindow(
+			"panel",
+			config.lookup("windows.panel.width"),
+			config.lookup("windows.panel.height")
+	);
+		resizeWindow(
+			"trace",
+			config.lookup("windows.trace.width"),
+			config.lookup("windows.trace.height")
+		);
+    }
+    catch (SettingException & e) {
+    	cout << "Erreur configuration windows";
+		cout << e.getPath();    
+    }
 }
 
 void findObject(vector<vector<Point> > contours, Point & center, int & rayon) {
@@ -456,37 +583,38 @@ float findRotation(int center, float angleView, int widthImage) {
 }
 
 
-float findDistance(int rayon, int imageH) {
+float findDistance(int rayon, int imageH, float focaleLength, float objectHeight, float sensorHeight) {
     if (rayon > 0) {
-        return (FOCALE_LEN * OBJECT_HEIGHT * imageH) / (rayon * SENSOR_H) / 10;
+        return (focaleLength * objectHeight * imageH) / (rayon * sensorHeight) / 10;
     }
     else { return 0; }
 }
 
-void findVitesses(float distanceObjet, float angleObjet, float & gauche, float & droite){
+void findVitesses(float distanceObjet, float angleObjet, float & gauche, float & droite,
+	float tropPres, float tropLoin, float tropAGauche, float tropADroite, float vitesse){
     
     float diff = abs(angleObjet) / 90;
     
     // L'objet est trop loin
-    if (distanceObjet >= TROP_LOIN and distanceObjet < 1000) {
+    if (distanceObjet >= tropLoin and distanceObjet < 1000) {
         gauche = AVANCER;
         droite = AVANCER;
         if (angleObjet > 0) { droite -= diff; }
         else if (angleObjet < 0) { gauche -= diff; }
     }
     // L'objet est trop près
-    else if (distanceObjet <= TROP_PRES and distanceObjet > 0) {
+    else if (distanceObjet <= tropPres and distanceObjet > 0) {
         gauche = RECULER;
         droite = RECULER;
         if (angleObjet > 0) { gauche += diff; }
         else if (angleObjet < 0) { droite += diff; }
     }
     else { // L'objet est à distance adéquate
-        if (angleObjet >= TROP_A_DROITE) { 
+        if (angleObjet >= tropADroite) { 
             gauche = diff; 
             droite = -diff; 
         }
-        else if (angleObjet <= TROP_A_GAUCHE) { 
+        else if (angleObjet <= tropAGauche) { 
             gauche = -diff; 
             droite = diff; 
         }
@@ -496,7 +624,7 @@ void findVitesses(float distanceObjet, float angleObjet, float & gauche, float &
         }
     }
     
-    gauche *= VITESSE;
-    droite *= VITESSE;
+    gauche *= vitesse;
+    droite *= vitesse;
 }
 
