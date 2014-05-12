@@ -7,7 +7,7 @@ using namespace std;
 
 int main( int argc, const char** argv )
 {
-       Mat img = imread("MyPic.JPG", CV_LOAD_IMAGE_COLOR); 
+       Mat img = imread("../normalization-build/MyPic.JPG", CV_LOAD_IMAGE_COLOR); 
 
        if (img.empty()) 
        {
@@ -22,7 +22,11 @@ int main( int argc, const char** argv )
 
        split(img_hist_equalized,channels); 
 
-       equalizeHist(channels[0], channels[0]);
+       imwrite("Y_channel.jpg",channels[0]);
+       imwrite("Cr_channel.jpg",channels[1]);
+       imwrite("Cb_channel.jpg",channels[2]);
+
+	equalizeHist(channels[0], channels[0]);
 
    merge(channels,img_hist_equalized); 
 
