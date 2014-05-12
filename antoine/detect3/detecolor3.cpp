@@ -57,6 +57,8 @@ int main (int argc, char **argv) {
 	    tracer,
 	    compteurErreurs,
         key,
+      	fontFaceText,
+      	thicknessText,
 	    rayon,
 	    maximumStep,
 	    
@@ -87,6 +89,8 @@ int main (int argc, char **argv) {
 	    
 	    useWindowsValue;
 	   
+   double fontScaleText;
+   
 	Mat frameOrigine,
 	    frameCouleurs,
 	    frameHSV,
@@ -97,11 +101,22 @@ int main (int argc, char **argv) {
         frameOutput,
         element;
         
-	Point center;
+    ostringstream distanceText,
+    	angleText,
+    	vitesseGText,
+    	vitesseDText;
+    
+	Point center,
+		lineDistanceText,
+		lineAngleText,
+		lineVitesseGText,
+		lineVitesseDText;
 	
 	vector<Mat> 
 		channels, 
 		outputFrames(3);
+		
+	Scalar colorText;
 	
 	vector<vector<Point> > contours;
 	
@@ -165,8 +180,12 @@ int main (int argc, char **argv) {
 	    tracer = 1;
 	    compteurErreurs = 0;
         key = 0;
+        fontFaceText = FONT_HERSHEY_SIMPLEX;
+        thicknessText = 2;
 	    rayon = max(videoWidth, videoHeight);
 	    maximumStep = config.lookup("analyseObjet.distance.maximumStep");
+	    
+	    fontScaleText = 0.5;
 	    
 	    angle = 0.0;
     	newAngle = 0.0;
@@ -191,12 +210,18 @@ int main (int argc, char **argv) {
 	    registerVideo = config.lookup("output.registerVideo"),
 	    registerFile = config.lookup("output.registerFile");
 	    
+	    colorText = Scalar(0, 0, 255); // red
+	    
 		useWindowsValue = config.lookup("windows.useWindows");
 	   
 		frameTrace = Mat(videoHeight, videoWidth, CV_8UC3),
         frameOutput = Mat(videoHeight, videoWidth * 3, CV_8UC3);
         
 		center = Point((int)(videoWidth / 2) , (int)(videoHeight / 2));
+		lineDistanceText = Point(5, 20);
+		lineAngleText = Point(5, 40);
+		lineVitesseGText = Point(5, 60);
+		lineVitesseDText = Point(5, 80);
 	
 		outputVideo.open(
 			(const char*) config.lookup("output.video.file"),
@@ -246,15 +271,15 @@ int main (int argc, char **argv) {
 		createTrackbar("hue tolerance", "panel", &hueTolerance, 180);
 		createTrackbar("saturation tolerance", "panel", &saturationTolerance, 255);
 	
-		createTrackbar("hue base Inverse", "panel", &hueBase2, 180);
-		createTrackbar("saturation base Inverse", "panel", &saturationBase2, 255);
-		createTrackbar("hue tolerance Inverse", "panel", &hueTolerance2, 180);
-		createTrackbar("saturation tolerance Inverse", "panel", &saturationTolerance2, 255);
+		createTrackbar("Appliquer la détection 2", "panel", &useInRange2, 1);
+		
+		createTrackbar("hue base 2", "panel", &hueBase2, 180);
+		createTrackbar("saturation base 2", "panel", &saturationBase2, 255);
+		createTrackbar("hue tolerance 2", "panel", &hueTolerance2, 180);
+		createTrackbar("saturation tolerance 2", "panel", &saturationTolerance2, 255);
 	
 		createTrackbar("Taille Erode", "panel", &erodeSize, 30);
 		createTrackbar("Taille Dilate", "panel", &dilateSize, 30);
-	
-		createTrackbar("Appliquer la détection inverse", "panel", &useInRange2, 1);
 	
 		createTrackbar("Afficher la détection", "panel", &tracer, 1);
 	}
@@ -404,10 +429,30 @@ int main (int argc, char **argv) {
                 circle(frameCouleurs, center, 2, Scalar(0, 255, 0), -1); // centre
                 circle(frameCouleurs, center, rayon, Scalar(0, 255, 0), 1); // périmètre
                 
-                // Fenêtre Transformed
+                // Fenêtre Detection
                 cvtColor(frameDetection, frameDetection, CV_GRAY2BGR);
                 circle(frameDetection, center, 2, Scalar(0, 0, 255), -1);
                 circle(frameDetection, center, rayon, Scalar(0, 0, 255), 1); 
+                
+                // Afficher le texte
+                distanceText << "distance : " << distance;
+                angleText << "angle : " << angle;
+                vitesseGText << "vitesse G : " << Rg;
+                vitesseDText << "vitesse D : " << Rd;
+                
+                putText(frameDetection, distanceText.str(), lineDistanceText, fontFaceText, fontScaleText, colorText, thicknessText);
+                putText(frameDetection, angleText.str(), lineAngleText, fontFaceText, fontScaleText, colorText, thicknessText);
+                putText(frameDetection, vitesseGText.str(), lineVitesseGText, fontFaceText, fontScaleText, colorText, thicknessText);
+                putText(frameDetection, vitesseDText.str(), lineVitesseDText, fontFaceText, fontScaleText, colorText, thicknessText);
+                
+                distanceText.str("");
+                distanceText.clear();
+                angleText.str("");
+                angleText.clear();
+                vitesseGText.str("");
+                vitesseGText.clear();
+                vitesseDText.str("");
+                vitesseDText.clear();
             }
             
             // Fenêtre Trace
