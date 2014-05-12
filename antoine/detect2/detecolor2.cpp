@@ -3,55 +3,78 @@
 #include <string>
 #include <opencv2/opencv.hpp>
 
-#define SOURCE_FILE "source"
-#define OUTPUT_FILE "output"
+// SOURCE ET OUTPUT
+#define SOURCE_FILE "source" // source
+#define OUTPUT_FILE "output" // output
+#define OUTPUT_VIDEO_FILE "videoutput.avi" // videoutput.avi
+#define DETECTION_FILE "detectionFile" // detectionFile
 
-// C920 Logitech
-#define FIELD_VIEW 78
-#define FOCALE_LEN 3.67
-#define SENSOR_DIAG 6.0
-#define SENSOR_W 4.8
-#define SENSOR_H 3.6
+#define OUTPUT_VALEURS true // true
+#define OUTPUT_VIDEO true // true
+// ================||
 
-#define OBJECT_HEIGHT 30
+// VALEURS CAMERA (default : logitech C92)
+#define FIELD_VIEW 78 // 78
+#define FOCALE_LEN 3.67 // 3.67
+#define SENSOR_DIAG 6.0 // 6.0
+#define SENSOR_W 4.8 // 4.8
+#define SENSOR_H 3.6 // 3.6
+// ==============||
 
-#define REFRESH 30
-#define PAUSE_KEY 32
-#define EXIT_KEY 10
+// CARACTERISTIQUES OBJET
+#define OBJECT_HEIGHT 8 // 10
+// ======================||
 
-#define HUE_BASE 180
-#define HUE_TOLERANCE 20
-#define SATURATION_BASE 186 // 255
-#define SATURATION_TOLERANCE 60 // 60
-#define DILATE_SIZE 2
-#define ERODE_SIZE 7
+// BOUCLE OPENCV
+#define REFRESH 30 // 30
+#define PAUSE_KEY 32 // 32
+#define EXIT_KEY 10 // 10
+// =============||
 
-#define HUE_BASE_INVERSE 0
-#define HUE_TOLERANCE_INVERSE 5
-#define SATURATION_BASE_INVERSE 184
-#define SATURATION_TOLERANCE_INVERSE 60
+// VALEURS PANEL DETECTION
+#define BLUR 5
 
-#define MAX_ERRORS 5
-#define MIN_PIX 0
+#define HUE_BASE 180 // 180
+#define HUE_TOLERANCE 5 // 20
+#define SATURATION_BASE 255 // 186
+#define SATURATION_TOLERANCE 165 // 60
 
-#define VITESSE 50
-#define TROP_PRES 30
-#define TROP_LOIN 100
-#define TROP_A_GAUCHE -11
-#define TROP_A_DROITE 11
+#define HUE_BASE_INVERSE 0 // 0
+#define HUE_TOLERANCE_INVERSE 0 // 5
+#define SATURATION_BASE_INVERSE 255 // 184
+#define SATURATION_TOLERANCE_INVERSE 165 // 60
 
-#define AVANCER 1
-#define STOPPER 0
-#define RECULER -1
+#define ERODE_SIZE 10 // 7
+#define DILATE_SIZE 0 // 2
+// =====================||
+
+// CHOIX DES VITESSES DES ROUES
+#define VITESSE 50 // 50
+#define TROP_PRES 30 // 30
+#define TROP_LOIN 100 // 100
+#define TROP_A_GAUCHE -11 // -11
+#define TROP_A_DROITE 11 // 11
+
+#define AVANCER 1 // 1
+#define STOPPER 0 // 0
+#define RECULER -1 // -1
+// =============================||
+
+// COMPORTEMENT DU ROBOT
+#define MAXIMUM_DEPLACEMENT_POSSIBLE 20 // 20
+// =====================||
+
 
 using namespace cv;
 using namespace std;
+
 
 // Fonctions utilisées
 float findRotation(int center, float angleView, int widthImage);
 float findDistance(int rayon, int imageH);
 void findVitesses(float distance, float angle, float & Rg, float & Rd);
 void findObject(vector<vector<Point> > contours, Point & center, int & rayon);
+
 
 int main (int argc, char **argv) {
     
@@ -60,9 +83,15 @@ int main (int argc, char **argv) {
     // Capture de la source
     ifstream sourceFile;
     string source;
+    
     sourceFile.open(SOURCE_FILE);
-    getline(sourceFile, source);
-    sourceFile.close();
+    
+    if(sourceFile.is_open()) {
+		getline(sourceFile, source);
+		sourceFile.close();
+	}
+	else { source = "0"; }
+	
     VideoCapture video;
     switch (source[0]) {
         case 'v':
@@ -88,16 +117,16 @@ int main (int argc, char **argv) {
 	
 	resizeWindow("base", 500, 375);
 	resizeWindow("transformed", 500, 375);
-	resizeWindow("panel", 450, 175);
+	resizeWindow("panel", 500, 750);
 	resizeWindow("trace", 500, 375);
 	
 	moveWindow("base", 0, 0);
-	moveWindow("transformed", 520, 550);
-	moveWindow("panel", 0, 410);
-	moveWindow("trace", 520, 0);
+	moveWindow("transformed", 0, 375);
+	moveWindow("panel", 500, 0);
+	moveWindow("trace", 1000, 0);
 	
 	// Déclaration des variables utilisées
-	int blur = 1,
+	int blur = BLUR,
 	    tracer = 1,
 	    norma = 1,
 	    inverseRed = 1,
@@ -113,15 +142,21 @@ int main (int argc, char **argv) {
         key = 0,
         videoHeight = video.get(CV_CAP_PROP_FRAME_HEIGHT),
         videoWidth = video.get(CV_CAP_PROP_FRAME_WIDTH),
-	    rayon = max(videoWidth, videoHeight);
+	    rayon = max(videoWidth, videoHeight),
+	    erodeSize = ERODE_SIZE,
+	    dilateSize = DILATE_SIZE;
         
-    float angle = 0.0, 
+    float angle = 0.0,
+    	newAngle = 0.0, 
         distance = 0.0, 
+        newDistance = 0.0,
         Rg = 0.0, 
         Rd = 0.0;
 	
 	bool continuer = true,
-	    pause = false;
+	    pause = false,
+	    registerVideo = OUTPUT_VIDEO,
+	    registerValeurs = OUTPUT_VALEURS;
 	   
 	Mat frameOrigine,
 	    frameCouleurs,
@@ -130,33 +165,52 @@ int main (int argc, char **argv) {
 	    frameDetectionInverseRed,
 	    frameTrace(videoHeight, videoWidth, CV_8UC3),
         frameContours,
+        frameOutput(videoHeight, videoWidth * 3, CV_8UC3),
         element;
         
 	Point center((int)(videoWidth / 2) , (int)(videoHeight / 2));
 	
-	vector<Mat> channels;
+	vector<Mat> channels, outputFrames(3);
 	
 	vector<vector<Point> > contours;
 	
+	VideoWriter outputVideo;
+	outputVideo.open(
+		OUTPUT_VIDEO_FILE, 
+		CV_FOURCC('M', 'J', 'P', 'G'), 
+		10, 
+		Size(videoWidth * 3, videoHeight), 
+		true
+	);
+	if (! outputVideo.isOpened()) {
+		cout << "Problème output video.\n";
+		registerVideo = false;
+	} 
+	
 	ofstream output;
 	output.open(OUTPUT_FILE);
+	if (! output.is_open()) { registerValeurs = false; }
 
     // Création des barres de sélection	
-	//createTrackbar("blur", "panel", &blur, 5);
-	createTrackbar("trace", "panel", &tracer, 1);
+	createTrackbar("Valeur de flou", "panel", &blur, 30);
+	createTrackbar("Appliquer l'égalisation d'histogramme", "panel", &norma, 1);
 	
 	createTrackbar("hue base", "panel", &hue, 180);
 	createTrackbar("saturation base", "panel", &saturation, 255);
-	createTrackbar("hue tolerance", "panel", &hueCustom, 100);
-	createTrackbar("saturation tolerance", "panel", &saturationCustom, 100);
+	createTrackbar("hue tolerance", "panel", &hueCustom, 180);
+	createTrackbar("saturation tolerance", "panel", &saturationCustom, 255);
 	
 	createTrackbar("hue base Inverse", "panel", &hueInverse, 180);
 	createTrackbar("saturation base Inverse", "panel", &saturationInverse, 255);
-	createTrackbar("hue tolerance Inverse", "panel", &hueToleranceInverse, 100);
-	createTrackbar("saturation tolerance Inverse", "panel", &saturationToleranceInverse, 100);
+	createTrackbar("hue tolerance Inverse", "panel", &hueToleranceInverse, 180);
+	createTrackbar("saturation tolerance Inverse", "panel", &saturationToleranceInverse, 255);
 	
-	createTrackbar("norma", "panel", &norma, 1);
-	createTrackbar("Inverse Red Range", "panel", &inverseRed, 1);
+	createTrackbar("Taille Erode", "panel", &erodeSize, 30);
+	createTrackbar("Taille Dilate", "panel", &dilateSize, 30);
+	
+	createTrackbar("Appliquer la détection inverse", "panel", &inverseRed, 1);
+	
+	createTrackbar("Afficher la détection", "panel", &tracer, 1);
 	
 	
 	
@@ -173,7 +227,7 @@ int main (int argc, char **argv) {
 		    // Gestion des erreurs si l'image est vide
 			cout << "Problème frame\n";
 			compteurErreurs ++;
-			if (compteurErreurs > MAX_ERRORS) {
+			if (compteurErreurs > 5) {
 	            cout << "Arrêt : 6 frames erronées consécutives\n";
 	            continuer = false;
 			}
@@ -183,7 +237,7 @@ int main (int argc, char **argv) {
 		    
 		    // Blur / Flou
 		    if (blur) {
-		        //GaussianBlur(frame, frame, Size(9, 9), blur, blur);
+		        GaussianBlur(frameCouleurs, frameCouleurs, Size(9, 9), blur, blur);
 		    }
 		    
 		    // Normalize
@@ -219,12 +273,22 @@ int main (int argc, char **argv) {
             }
             
             // Erode
-            element = getStructuringElement(MORPH_ELLIPSE, Size(ERODE_SIZE, ERODE_SIZE));    
-            erode(frameDetection, frameDetection, element);
-            
-            // Dilate
-            element = getStructuringElement(MORPH_ELLIPSE, Size(DILATE_SIZE, DILATE_SIZE));    
-            dilate(frameDetection, frameDetection, element);           
+            if (erodeSize) {
+		        element = getStructuringElement(
+		        	MORPH_ELLIPSE, 
+		        	Size(erodeSize, erodeSize)
+	        	);    
+		        erode(frameDetection, frameDetection, element);
+	        }
+	        
+	        // Dilate
+	        if (dilateSize) {
+		        element = getStructuringElement(
+		        	MORPH_ELLIPSE, 
+		        	Size(dilateSize, dilateSize)
+	        	);    
+		        dilate(frameDetection, frameDetection, element);           
+            }
             
             // Trouver l'objet
             frameContours = frameDetection.clone();
@@ -233,18 +297,19 @@ int main (int argc, char **argv) {
             findObject(contours, center, rayon);
             
             // Calculer angle distance et vitesses
-            angle = findRotation(center.x, FIELD_VIEW, videoWidth);
-            distance = findDistance(rayon, videoHeight);
-            findVitesses(distance, angle, Rg, Rd);
-                
-            // Ecrire la rotation, la distance et les vitesses
-            if(! pause) {
-                output 
-                    << "Rg = " << Rg << " "
-                    << "Rd = " << Rd << " "
-                    << "A = " << angle << "°            "
-                    << "D = " << distance << "cm" << endl;
+            newDistance = findDistance(rayon, videoHeight);
+	        newAngle = findRotation(center.x, FIELD_VIEW, videoWidth);
+	        // Amelioration de comportement quand detection defaillante
+            if (abs(distance - newDistance) > MAXIMUM_DEPLACEMENT_POSSIBLE) {
+            	Rg = STOPPER;
+            	Rd = STOPPER;
             }
+            else {
+            	distance = newDistance;
+            	angle = newAngle;
+	        	findVitesses(distance, angle, Rg, Rd);
+           	}
+                
             
             if (rayon <= 0) { rayon = 1; }
             
@@ -268,6 +333,25 @@ int main (int argc, char **argv) {
 			imshow("base", frameCouleurs);
 			imshow("transformed", frameDetection);
 			imshow("trace", frameTrace);
+			
+			// Output
+            if (! pause) {
+            	if (registerVideo) {
+				    outputFrames[0] = frameCouleurs;
+					outputFrames[1] = frameDetection;
+					outputFrames[2] = frameTrace;
+		        	hconcat(outputFrames, frameOutput);
+		        	outputVideo << frameOutput;
+            	}
+            	if (registerValeurs) {
+		            output 
+		                << "Rg = " << Rg << " "
+		                << "Rd = " << Rd << " "
+		                << "A = " << angle << "°            "
+		                << "D = " << distance << "cm" << endl;
+                }
+            }
+			
 		}
 		
 		// Rafraîchissement
@@ -294,7 +378,9 @@ int main (int argc, char **argv) {
 	frameDetectionInverseRed.release();
 	frameTrace.release();
 	frameContours.release();
+	frameOutput.release();
 	output.close();
+	outputVideo.release();
 	
 	cout << "Fin\n";
     
